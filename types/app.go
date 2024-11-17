@@ -1,0 +1,115 @@
+package types
+
+import (
+	"fmt"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"io"
+	"strings"
+	"time"
+)
+
+var (
+	sarabiDataPath = "/var/sarabi/data"
+)
+
+type (
+	Application struct {
+		ID        uuid.UUID `gorm:"primaryKey"`
+		Name      string
+		Domain    string
+		CreatedAt time.Time
+		UpdatedAt time.Time
+		DeletedAt gorm.DeletedAt `gorm:"index"`
+	}
+
+	Deployment struct {
+		ID            uuid.UUID `gorm:"primaryKey"`
+		ApplicationID uuid.UUID `gorm:"not null"`
+		Environment   string
+		Status        string
+		Instances     int
+		Port          string
+		InstanceType  InstanceType // frontend, backend, database, proxy
+		Application   Application  `gorm:"foreignKey:ApplicationID"`
+	}
+
+	DeploymentStatus string
+	InstanceType     string
+)
+
+type (
+	CreateApplicationParams struct {
+		Name   string `json:"name"`
+		Domain string `json:"domain"`
+	}
+
+	DeployParams struct {
+		ApplicationID uuid.UUID
+		Frontend      io.Reader
+		Backend       io.Reader
+		Instances     int
+		Environment   string
+	}
+
+	CreateDeploymentParams struct {
+		ApplicationID uuid.UUID `json:"application_id"`
+		Environment   string    `json:"environment"`
+		Instances     int
+		Port          string       `json:"-"`
+		InstanceType  InstanceType `json:"instance_type"` // frontend, backend, database, proxy
+	}
+)
+
+const (
+	DeploymentStatusActive  DeploymentStatus = "ACTIVE"
+	DeploymentStatusCreated DeploymentStatus = "CREATED"
+	DeploymentStatusStopped DeploymentStatus = "STOPPED"
+)
+
+const (
+	InstanceTypeFrontend InstanceType = "frontend"
+	InstanceTypeBackend  InstanceType = "backend"
+	InstanceTypeProxy    InstanceType = "proxy"
+)
+
+func (a *Deployment) ImageName() string {
+	return fmt.Sprintf("%s:%s", strings.ReplaceAll(a.ID.String(), "-", ""), a.Environment)
+}
+
+func (a *Deployment) DBInstanceName() string {
+	return fmt.Sprintf("postgres-%s", a.Application.Name)
+}
+
+func (a *Deployment) NetworkName() string {
+	return fmt.Sprintf("network-%s-%s", strings.ReplaceAll(a.ApplicationID.String(), "-", ""), a.Environment)
+}
+
+func (a *Deployment) DatabaseMountVolume() string {
+	return fmt.Sprintf("/var/lib/postgresql/%s/data", a.Application.ID)
+}
+
+func (a *Deployment) ContainerName(instanceId int) string {
+	return fmt.Sprintf("%s-%s-%d", strings.ReplaceAll(a.ID.String(), "-", ""), a.Environment, instanceId)
+}
+
+func (a *Deployment) AccessURL(instanceType InstanceType) string {
+	return fmt.Sprintf("%s-%s.%s", instanceType, a.Environment, a.Application.Domain)
+}
+
+func (a *Deployment) InternalAccessURL(instanceId int) string {
+	return fmt.Sprintf("%s:%s", a.ContainerName(instanceId), a.Port)
+}
+
+func (a *Deployment) ProxyContainerName() string {
+	return fmt.Sprintf("%s-%s", a.Application.Name, "proxy")
+}
+
+func (a *Deployment) SiteContentPath() string {
+	return fmt.Sprintf("/var/caddy/share/%s", strings.ReplaceAll(a.ID.String(), "-", ""))
+}
+
+func (a *Deployment) BinPath() string {
+	// /var/sarabi/data/bins/{application-uuid}/deployments/{deployment-uuid}
+	return fmt.Sprintf("%s/bins/%s/deployments/%s.tar.gz", sarabiDataPath, a.ApplicationID, a.ID)
+}
