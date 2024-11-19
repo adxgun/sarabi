@@ -24,7 +24,7 @@ import (
 
 type Docker interface {
 	RunDind(ctx context.Context) error
-	BuildImage(ctx context.Context, application *types.Deployment, buildContextDir string) (BuildImageResult, error)
+	BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error)
 	IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo, error)
 	CreateNetwork(ctx context.Context, name string) error
 	PullImage(ctx context.Context, name string) error
@@ -60,7 +60,7 @@ func (d *dockerClient) RunDind(ctx context.Context) error {
 	return d.dindRunner.Run(ctx)
 }
 
-func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deployment, buildContextDir string) (BuildImageResult, error) {
+func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error) {
 	buildCtx, err := bundler.CreateBuildContextFromTar(application.BinPath())
 	if err != nil {
 		return BuildImageResult{}, err

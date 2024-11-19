@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 	"sarabi/components"
 	"sarabi/integrations/docker"
-	"sarabi/logger"
 	"sarabi/service"
 )
 
@@ -51,9 +49,6 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		return nil, err
 	}
 
-	logger.Info("created db params",
-		zap.Any("params", dbParams))
-
 	err = d.secretService.CreateDeploymentSecrets(ctx, deploymentID, dbVars)
 	if err != nil {
 		return nil, err
@@ -75,8 +70,6 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	for _, ss := range dbVars {
 		envs = append(envs, ss.Env())
 	}
-
-	logger.Info("envs", zap.Any("env values", envs))
 
 	volumeMounts := []string{fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), d.dbProvider.DataPath())}
 	params := docker.StartContainerParams{

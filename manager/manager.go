@@ -177,14 +177,6 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 }
 
 func (m *manager) CreateSecrets(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {
-	// 1. find last active deployments(fe, be) - using application_id, environment
-	// 2. create new deployments from 1. (fe, be)
-	// 3. copy the artifacts into the new deployments
-	// 4. find the secrets of the old deployments
-	// 5. create the new incoming secrets + secrets from the old instances
-	// 6. invoke fe + be components
-	// 7. return
-
 	logger.Info("new request",
 		zap.Any("paras", params),
 		zap.String("application_id", applicationID.String()),
@@ -303,6 +295,5 @@ func (m *manager) setupAppSecrets(ctx context.Context, deployment *types.Deploym
 	}
 
 	dbSecrets = append(dbSecrets, secret)
-	logger.Info("found db params", zap.Any("db_params", dbSecrets))
 	return m.secretService.CreateDeploymentSecrets(ctx, deployment.ID, dbSecrets)
 }

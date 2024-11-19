@@ -54,8 +54,7 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 		return nil, err
 	}
 
-	// for redeployment: in cases of environment variable changes or similar event, use an existing image
-	_, err = b.dockerClient.BuildImage(ctx, deployment, "")
+	_, err = b.dockerClient.BuildImage(ctx, deployment)
 	if err != nil {
 		return nil, err
 	}
