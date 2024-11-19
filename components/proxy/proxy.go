@@ -12,7 +12,6 @@ import (
 	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
 	"sarabi/service"
-	"sarabi/types"
 )
 
 var (
@@ -23,7 +22,7 @@ var (
 			admin :2019
 		}
 		`
-	defaultConfigPath    = "/etc/caddy/%s/Caddyfile"
+	defaultConfigPath    = "/etc/caddy/Caddyfile"
 	ProxyServerName      = "main-proxy-server"
 	ProxyServerConfigUrl = "http://localhost:2019/config/"
 )
@@ -52,25 +51,15 @@ func (p *proxyComponent) Name() string {
 }
 
 func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
-	deployment, err := p.appService.GetDeployment(ctx, deploymentID)
-	if err != nil {
-		return nil, err
-	}
-
-	running, info := p.dockerClient.IsContainerRunning(ctx, deployment.ProxyContainerName())
-	if running {
+	running, info, err := p.dockerClient.IsContainerRunning(ctx, ProxyServerName)
+	if err == nil && running {
 		return &components.BuilderResult{
 			ID:   info.ID,
 			Name: info.Name,
 		}, nil
 	}
 
-	err = p.dockerClient.CreateNetwork(ctx, deployment.NetworkName())
-	if err != nil {
-		return nil, err
-	}
-
-	if err := p.writeCaddyInitConfig(deployment); err != nil {
+	if err := p.writeCaddyInitConfig(); err != nil {
 		return nil, err
 	}
 
@@ -90,13 +79,19 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		apiPort:   []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "2019"}},
 	}
 
-	configPathOnHost := fmt.Sprintf(defaultConfigPath, deployment.ApplicationID)
 	bindVolumes := []string{
-		fmt.Sprintf("%s:/etc/caddy/Caddyfile", configPathOnHost),
+		fmt.Sprintf("%s:/etc/caddy/Caddyfile", defaultConfigPath),
 		"/var/caddy/share/:/var/caddy/share",
 	}
-	result, err := p.dockerClient.StartContainerAndWait(ctx, caddyImageName, deployment.ProxyContainerName(),
-		deployment.NetworkName(), bindVolumes, []string{}, exposedPorts, portBindings)
+	params := docker.StartContainerParams{
+		Image:        caddyImageName,
+		Container:    ProxyServerName,
+		Network:      "",
+		Volumes:      bindVolumes,
+		ExposedPorts: exposedPorts,
+		PortBindings: portBindings,
+	}
+	result, err := p.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -112,23 +107,22 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 }
 
 func (p *proxyComponent) Cleanup(ctx context.Context, result *components.BuilderResult) error {
-	return nil
+	return p.dockerClient.StopAndRemoveContainer(ctx, result.ID)
 }
 
-func (p *proxyComponent) writeCaddyInitConfig(deployment *types.Deployment) error {
-	path := fmt.Sprintf(defaultConfigPath, deployment.ApplicationID)
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(path); err != nil {
+func (p *proxyComponent) writeCaddyInitConfig() error {
+	if _, err := os.Stat(defaultConfigPath); err == nil {
+		if err := os.Remove(defaultConfigPath); err != nil {
 			return err
 		}
 	}
 
-	dir := filepath.Dir(path)
+	dir := filepath.Dir(defaultConfigPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 
-	fi, err := os.Create(path)
+	fi, err := os.Create(defaultConfigPath)
 	if err != nil {
 		return err
 	}

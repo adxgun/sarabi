@@ -3,6 +3,7 @@ package httphandlers
 import (
 	"context"
 	"encoding/json"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -11,6 +12,10 @@ import (
 	"sarabi/manager"
 	"sarabi/types"
 	"strings"
+)
+
+var (
+	maxUploadSize = 2 << 30 // 2GB
 )
 
 type (
@@ -52,11 +57,11 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		ApplicationID uuid.UUID `json:"application_id"`
 		Instances     int       `json:"instances"`
 		Environment   string    `json:"environment"`
+		StorageEngine string    `json:"storage_engine"`
 	}
 
-	deployParamsPayload := r.FormValue("json")
-	logger.Info("body", zap.String("json", deployParamsPayload))
-	if err := json.Unmarshal([]byte(deployParamsPayload), &body); err != nil {
+	logger.Info("api body", zap.String("value", r.FormValue("json")))
+	if err := json.Unmarshal([]byte(r.FormValue("json")), &body); err != nil {
 		badRequest(w, errors.Wrap(err, "invalid request body"))
 		return
 	}
@@ -65,11 +70,19 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		ApplicationID: body.ApplicationID,
 		Instances:     body.Instances,
 		Environment:   body.Environment,
+		StorageEngine: types.StorageEngine(body.StorageEngine),
 	}
 	for _, ff := range r.MultipartForm.File["files"] {
-		logger.Info("file: ",
-			zap.String("name", ff.Filename),
-			zap.Int64("size", ff.Size))
+		if !strings.HasSuffix(ff.Filename, ".tar.gz") {
+			badRequest(w, errors.New("unknown upload type: "+ff.Filename))
+			return
+		}
+
+		if ff.Size > int64(maxUploadSize) {
+			badRequest(w, errors.New("upload too large: "+ff.Filename))
+			return
+		}
+
 		file, err := ff.Open()
 		if err != nil {
 			logger.Error("failed to process deployment upload: ",
@@ -88,13 +101,37 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("starting deployment", zap.Any("params", param.ApplicationID))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	resp, err := handler.mn.Deploy(ctx, param)
+	resp, err := handler.mn.Deploy(context.Background(), param)
 	if err != nil {
 		serverError(w, errors.Wrap(err, "deployment failed"))
 		return
 	}
 
 	ok(w, "deployment succeeded", resp)
+}
+
+func (handler *ApiHandler) UpdateEnvs(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	var body struct {
+		Environment string                     `json:"environment"`
+		Secrets     []types.CreateSecretParams `json:"secrets"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	err = handler.mn.CreateSecrets(context.Background(), applicationID, body.Environment, body.Secrets...)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "secrets updated", nil)
 }

@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"sarabi"
+	"sarabi/bundler"
+	proxycomponent "sarabi/components/proxy"
 	"sarabi/database"
 	"sarabi/httphandlers"
 	"sarabi/integrations/caddy"
@@ -26,7 +30,7 @@ func main() {
 	}
 	defer logger.Sync()
 
-	srv, err := setup()
+	srv, err, teardown := setup()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,6 +48,12 @@ func main() {
 	<-done
 	log.Println("Shutting down...")
 
+	if teardown != nil {
+		if err := teardown(); err != nil {
+			logger.Error("teardown failed", zap.Error(err))
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
@@ -51,21 +61,21 @@ func main() {
 	}
 }
 
-func setup() (*http.Server, error) {
+func setup() (*http.Server, error, func() error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	docker, err := dockerclient.NewDockerClient()
 	if err != nil {
-		return nil, err
+		return nil, err, nil
 	}
 
 	if err := docker.RunDind(ctx); err != nil {
-		return nil, err
+		return nil, err, nil
 	}
 
 	db, err := database.Open(manager.DBDir)
 	if err != nil {
-		return nil, err
+		return nil, err, nil
 	}
 
 	deploymentRepo := database.NewDeploymentRepository(db)
@@ -78,15 +88,23 @@ func setup() (*http.Server, error) {
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo)
 	caddyClient := caddy.NewCaddyClient(appService)
 
-	mn := manager.New(appService, secretService, docker, caddyClient)
+	caddyProxy := proxycomponent.New(docker, appService, caddyClient)
+	result, err := caddyProxy.Run(context.Background(), uuid.Nil)
+	if err != nil {
+		return nil, err, nil
+	}
+
+	mn := manager.New(appService, secretService, docker, caddyClient, bundler.NewArtifactStore())
 	apiHandler := httphandlers.NewApiHandler(mn)
 	routes := httphandlers.Routes(apiHandler)
 
 	addr := ":3646"
 	return &http.Server{
-		Addr:    addr,
-		Handler: routes,
-	}, nil
+			Addr:    addr,
+			Handler: routes,
+		}, nil, func() error {
+			return caddyProxy.Cleanup(context.Background(), result)
+		}
 }
 
 /*

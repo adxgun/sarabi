@@ -74,9 +74,15 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 	for idx := 0; idx < deployment.Instances; idx++ {
 		g.Go(func() error {
 			httpPort, _ := nat.NewPort("tcp", deployment.Port)
-			containerName := deployment.ContainerName(idx)
-			newInfo, err := b.dockerClient.StartContainerAndWait(ctx, deployment.ImageName(),
-				containerName, deployment.NetworkName(), []string{}, envs, []nat.Port{httpPort}, nil)
+			params := docker.StartContainerParams{
+				Image:        deployment.ImageName(),
+				Container:    deployment.ContainerName(idx),
+				Network:      deployment.NetworkName(),
+				Volumes:      []string{},
+				Environments: envs,
+				ExposedPorts: []nat.Port{httpPort},
+			}
+			newInfo, err := b.dockerClient.StartContainerAndWait(ctx, params)
 			if err != nil {
 				return err
 			}
@@ -100,6 +106,10 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 	err = b.caddyClient.ApplyConfig(context.Background(), proxycomponent.ProxyServerConfigUrl, types.InstanceTypeBackend, deployment)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := b.dockerClient.ConnectContainer(context.Background(), proxycomponent.ProxyServerName, deployment.NetworkName()); err != nil {
+		logger.Warn("container connection error: ", zap.Error(err))
 	}
 
 	return &components.BuilderResult{

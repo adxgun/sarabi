@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 	"sarabi"
 	"sarabi/database"
-	"sarabi/logger"
 	"sarabi/types"
 )
 
@@ -40,11 +38,11 @@ func (s *secretService) Create(ctx context.Context, params types.CreateSecretPar
 	}
 
 	if sc, err := s.repository.FindBy(ctx, params.ApplicationID, params.Key, params.Environment, string(params.InstanceType)); err == nil && sc.ID != uuid.Nil {
-		logger.Info("found existing secret", zap.Any("value", sc))
 		err = s.repository.UpdateValue(ctx, sc.ID, encryptedValue)
 		if err != nil {
 			return nil, err
 		}
+		sc.Value = params.Value
 		return sc, nil
 	}
 
@@ -59,6 +57,8 @@ func (s *secretService) Create(ctx context.Context, params types.CreateSecretPar
 	if err := s.repository.Save(ctx, sc); err != nil {
 		return nil, err
 	}
+
+	sc.Value = params.Value
 	return sc, nil
 }
 

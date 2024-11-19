@@ -11,6 +11,7 @@ import (
 	"os"
 )
 
+// Encryptor handles encryption and decryption of application variables/secrets
 type Encryptor interface {
 	GenerateKey() ([]byte, error)
 	Encrypt(data string) (string, error)
@@ -18,7 +19,7 @@ type Encryptor interface {
 }
 
 const (
-	encryptionKeyFile = "fspaas.aes"
+	encryptionKeyFile = "sarabi.aes"
 )
 
 type encryptor struct{}
@@ -27,8 +28,11 @@ func NewEncryptor() Encryptor {
 	return &encryptor{}
 }
 
+// GenerateKey generates a random [32]byte encryption key and stores it in /sarabi_path/sarabi.aes
+// this function checks for an existing key and return that if available.
+// the generated key should be kept safe outside of this server(aka backup) in-case of data loss, in order to be able to retrieve
+// encrypted data(mainly application variables/secrets)
 func (e *encryptor) GenerateKey() ([]byte, error) {
-	// return encryption key if already exists
 	if _, err := os.Stat(encryptionKeyFile); err == nil {
 		f, err := os.Open(encryptionKeyFile)
 		if err != nil {

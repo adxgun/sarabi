@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"github.com/google/uuid"
 	"sarabi/database"
 	"sarabi/types"
+	"strings"
 )
 
 type (
@@ -15,6 +17,7 @@ type (
 		CreateDeployments(ctx context.Context, params []types.CreateDeploymentParams) ([]*types.Deployment, error)
 		CreateDeployment(ctx context.Context, param types.CreateDeploymentParams) (*types.Deployment, error)
 		FindCurrentlyActiveDeployments(ctx context.Context, applicationID uuid.UUID, instanceType types.InstanceType) ([]*types.Deployment, error)
+		FindCurrentlyActiveDeploymentsEnv(ctx context.Context, applicationID uuid.UUID, instanceType types.InstanceType, environment string) (*types.Deployment, error)
 		UpdateDeploymentStatus(ctx context.Context, deploymentID uuid.UUID, status types.DeploymentStatus) error
 	}
 )
@@ -65,7 +68,23 @@ func (a *applicationService) FindCurrentlyActiveDeployments(ctx context.Context,
 			actives = append(actives, a)
 		}
 	}
+
 	return actives, nil
+}
+
+func (a *applicationService) FindCurrentlyActiveDeploymentsEnv(ctx context.Context, applicationID uuid.UUID, instanceType types.InstanceType, environment string) (*types.Deployment, error) {
+	actives, err := a.FindCurrentlyActiveDeployments(ctx, applicationID, instanceType)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, next := range actives {
+		if strings.ToLower(environment) == strings.ToLower(next.Environment) {
+			return next, nil
+		}
+	}
+
+	return nil, errors.New("no active instance found for " + string(instanceType))
 }
 
 func (a *applicationService) UpdateDeploymentStatus(ctx context.Context, deploymentID uuid.UUID, status types.DeploymentStatus) error {
@@ -86,6 +105,7 @@ func (a *applicationService) CreateDeployment(ctx context.Context, param types.C
 		Instances:     param.Instances,
 		Port:          param.Port,
 		InstanceType:  param.InstanceType,
+		Identifier:    param.Identifier,
 	}
 
 	err := a.deploymentRepository.Save(ctx, deployment)

@@ -24,17 +24,16 @@ import (
 
 type Docker interface {
 	RunDind(ctx context.Context) error
-
 	BuildImage(ctx context.Context, application *types.Deployment, buildContextDir string) (BuildImageResult, error)
-	IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo)
+	IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo, error)
 	CreateNetwork(ctx context.Context, name string) error
 	PullImage(ctx context.Context, name string) error
-	StartContainerAndWait(ctx context.Context, imageName, containerName, networkName string,
-		volumeMounts, envs []string, exposedPorts []nat.Port, portBinds nat.PortMap) (*ContainerInfo, error)
+	StartContainerAndWait(ctx context.Context, params StartContainerParams) (*ContainerInfo, error)
 	RestartContainer(ctx context.Context, name string) error
 	StopAndRemoveContainer(ctx context.Context, containerName string) error
 	CopyFileIntoContainer(ctx context.Context, containerName, src, dest string) error
 	ExtractFiles(ctx context.Context, containerName, fileDir string) error
+	ConnectContainer(ctx context.Context, containerName, networkName string) error
 }
 
 type dockerClient struct {
@@ -109,21 +108,20 @@ func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deploy
 	return BuildImageResult{Name: imageName}, nil
 }
 
-func (d *dockerClient) IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo) {
+func (d *dockerClient) IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo, error) {
 	result, err := d.hostClient.ContainerInspect(ctx, container)
 	if err != nil {
 		if client.IsErrNotFound(err) {
-			return false, ContainerInfo{}
+			return false, ContainerInfo{}, nil
 		}
-		// TODO: return error here and allow sarabi.Manager to handle it
-		return false, ContainerInfo{}
+		return false, ContainerInfo{}, err
 	}
 
 	if result.State.Running || result.State.Restarting {
-		return true, ContainerInfo{ID: result.ID, Name: result.Name}
+		return true, ContainerInfo{ID: result.ID, Name: result.Name}, nil
 	}
 
-	return false, ContainerInfo{}
+	return false, ContainerInfo{}, errors.New("container is not running: " + string(result.State.Error))
 }
 
 func (d *dockerClient) CreateNetwork(ctx context.Context, name string) error {
@@ -156,11 +154,10 @@ func (d *dockerClient) PullImage(ctx context.Context, name string) error {
 	return nil
 }
 
-func (d *dockerClient) StartContainerAndWait(ctx context.Context, imageName, containerName, networkName string,
-	volumeMounts, envs []string, exposedPorts []nat.Port, portBindings nat.PortMap) (*ContainerInfo, error) {
+func (d *dockerClient) StartContainerAndWait(ctx context.Context, params StartContainerParams) (*ContainerInfo, error) {
 
 	if runtime.GOOS == "linux" {
-		tarPath := sharedVolume + "/" + imageName + ".tar"
+		tarPath := sharedVolume + "/" + params.Image + ".tar"
 		fi, err := os.Open(tarPath)
 		if err != nil {
 			return nil, err
@@ -174,28 +171,28 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, imageName, con
 	}
 
 	portSet := make(map[nat.Port]struct{})
-	for _, ep := range exposedPorts {
+	for _, ep := range params.ExposedPorts {
 		portSet[ep] = struct{}{}
 	}
 
 	var containerNetwork *network.NetworkingConfig
-	if networkName != "" {
+	if params.Network != "" {
 		containerNetwork = &network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{
-				networkName: {},
+				params.Network: {},
 			},
 		}
 	}
 
 	resp, err := d.hostClient.ContainerCreate(ctx,
 		&container.Config{
-			Env:          envs,
-			Image:        imageName,
+			Env:          params.Environments,
+			Image:        params.Image,
 			ExposedPorts: portSet,
 		},
 		&container.HostConfig{
-			Binds:        volumeMounts,
-			PortBindings: portBindings,
+			Binds:        params.Volumes,
+			PortBindings: params.PortBindings,
 			NetworkMode:  network.NetworkBridge,
 			RestartPolicy: container.RestartPolicy{
 				Name:              "on-failure",
@@ -204,7 +201,7 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, imageName, con
 		},
 		containerNetwork,
 		nil,
-		containerName)
+		params.Container)
 	if err != nil {
 		return nil, err
 	}
@@ -213,10 +210,13 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, imageName, con
 		return nil, err
 	}
 
-	isRunning, info := d.IsContainerRunning(ctx, resp.ID)
+	isRunning, info, err := d.IsContainerRunning(ctx, resp.ID)
 	for !isRunning {
 		time.Sleep(200 * time.Millisecond)
-		isRunning, info = d.IsContainerRunning(ctx, resp.ID)
+		isRunning, info, err = d.IsContainerRunning(ctx, resp.ID)
+		if err != nil {
+			break
+		}
 	}
 	return &info, nil
 }
@@ -306,10 +306,20 @@ func (d *dockerClient) ExtractFiles(ctx context.Context, containerName, fileDir 
 	return nil
 }
 
+func (d *dockerClient) ConnectContainer(ctx context.Context, containerName, networkName string) error {
+	return d.hostClient.NetworkConnect(ctx, networkName, containerName, nil)
+}
+
 func (d *dockerClient) wait(ctx context.Context, containerID string) {
-	isRunning, _ := d.IsContainerRunning(ctx, containerID)
+	isRunning, _, err := d.IsContainerRunning(ctx, containerID)
+	if err != nil {
+		return
+	}
 	for !isRunning {
 		time.Sleep(200 * time.Millisecond)
-		isRunning, _ = d.IsContainerRunning(ctx, containerID)
+		isRunning, _, err = d.IsContainerRunning(ctx, containerID)
+		if err != nil {
+			break
+		}
 	}
 }

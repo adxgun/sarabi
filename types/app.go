@@ -31,7 +31,8 @@ type (
 		Instances     int
 		Port          string
 		InstanceType  InstanceType // frontend, backend, database, proxy
-		Application   Application  `gorm:"foreignKey:ApplicationID"`
+		Identifier    string
+		Application   Application `gorm:"foreignKey:ApplicationID"`
 	}
 
 	DeploymentStatus string
@@ -50,6 +51,7 @@ type (
 		Backend       io.Reader
 		Instances     int
 		Environment   string
+		StorageEngine StorageEngine
 	}
 
 	CreateDeploymentParams struct {
@@ -58,7 +60,16 @@ type (
 		Instances     int
 		Port          string       `json:"-"`
 		InstanceType  InstanceType `json:"instance_type"` // frontend, backend, database, proxy
+		Identifier    string       `json:"identifier"`
 	}
+)
+
+type StorageEngine string
+
+const (
+	StorageEnginePostgres StorageEngine = "postgres"
+	StorageEngineMysql    StorageEngine = "mysql"
+	StorageEngineMongo    StorageEngine = "mongo"
 )
 
 const (
@@ -71,6 +82,7 @@ const (
 	InstanceTypeFrontend InstanceType = "frontend"
 	InstanceTypeBackend  InstanceType = "backend"
 	InstanceTypeProxy    InstanceType = "proxy"
+	InstanceTypeDatabase InstanceType = "database"
 )
 
 func (a *Deployment) ImageName() string {
@@ -86,7 +98,7 @@ func (a *Deployment) NetworkName() string {
 }
 
 func (a *Deployment) DatabaseMountVolume() string {
-	return fmt.Sprintf("/var/lib/postgresql/%s/data", a.Application.ID)
+	return fmt.Sprintf("/var/sarabi/data/storage/%s-%s/data", a.Application.Name, a.Environment)
 }
 
 func (a *Deployment) ContainerName(instanceId int) string {

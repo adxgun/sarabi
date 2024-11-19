@@ -11,28 +11,24 @@ import (
 	"sarabi/service"
 )
 
-const (
-	databaseImageName = "postgres:17"
-	databasePort      = 5432
-	databasePath      = "/var/lib/postgresql/data"
-)
-
 type databaseComponent struct {
 	dockerClient  docker.Docker
 	appService    service.ApplicationService
 	secretService service.SecretService
+	dbProvider    Provider
 }
 
-func New(dc docker.Docker, appSvc service.ApplicationService, secretService service.SecretService) components.Builder {
+func New(dc docker.Docker, appSvc service.ApplicationService, secretService service.SecretService, dbProvider Provider) components.Builder {
 	return &databaseComponent{
 		dockerClient:  dc,
 		appService:    appSvc,
 		secretService: secretService,
+		dbProvider:    dbProvider,
 	}
 }
 
 func (d *databaseComponent) Name() string {
-	return "database:" + databaseImageName
+	return "database:" + d.dbProvider.Image()
 }
 
 func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
@@ -41,13 +37,29 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		return nil, err
 	}
 
-	running, info := d.dockerClient.IsContainerRunning(ctx, deployment.DBInstanceName())
+	running, info, err := d.dockerClient.IsContainerRunning(ctx, d.dbProvider.ContainerName(deployment))
+	if err != nil {
+		return nil, err
+	}
 	if running {
 		return &components.BuilderResult{ID: info.ID, Name: info.Name}, nil
 	}
 
-	dbVars, err := d.secretService.FindDeploymentSecrets(ctx, deploymentID)
+	dbParams := d.dbProvider.EnvVars(deployment)
+	dbVars, err := d.secretService.CreateAll(ctx, dbParams...)
 	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("created db params",
+		zap.Any("params", dbParams))
+
+	err = d.secretService.CreateDeploymentSecrets(ctx, deploymentID, dbVars)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := d.dbProvider.Setup(); err != nil {
 		return nil, err
 	}
 
@@ -55,33 +67,26 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		return nil, err
 	}
 
-	if err := d.dockerClient.PullImage(ctx, databaseImageName); err != nil {
+	if err := d.dockerClient.PullImage(ctx, d.dbProvider.Image()); err != nil {
 		return nil, err
 	}
-
-	// TODO:
-	// 1. write postgresql config type
-	//  PostgresSQLConfig struct {
-	//    MaxConnections      int // 300
-	//    SharedBuffers       string // 30% of total memory
-	//    WorkMem             string // 16MB
-	//    MaintenanceWorkMem  string // 200MB
-	//}
 
 	var envs []string
 	for _, ss := range dbVars {
 		envs = append(envs, ss.Env())
 	}
-	logger.Info("db envs", zap.Any("envs", envs))
-	volumeMounts := []string{fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), databasePath)}
-	/*port, _ := nat.NewPort("tcp", "5432")
-	hostBinding := nat.PortBinding{
-		HostIP:   "0.0.0.0",
-		HostPort: "5432",
+
+	logger.Info("envs", zap.Any("env values", envs))
+
+	volumeMounts := []string{fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), d.dbProvider.DataPath())}
+	params := docker.StartContainerParams{
+		Image:        d.dbProvider.Image(),
+		Container:    d.dbProvider.ContainerName(deployment),
+		Network:      deployment.NetworkName(),
+		Volumes:      volumeMounts,
+		Environments: envs,
 	}
-	portBinding := nat.PortMap{port: []nat.PortBinding{hostBinding}}*/
-	startResp, err := d.dockerClient.StartContainerAndWait(ctx,
-		databaseImageName, deployment.DBInstanceName(), deployment.NetworkName(), volumeMounts, envs, nil, nil)
+	startResp, err := d.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {
 		return nil, err
 	}
