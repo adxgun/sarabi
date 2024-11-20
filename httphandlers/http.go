@@ -110,7 +110,7 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 	ok(w, "deployment succeeded", resp)
 }
 
-func (handler *ApiHandler) UpdateEnvs(w http.ResponseWriter, r *http.Request) {
+func (handler *ApiHandler) UpdateVariables(w http.ResponseWriter, r *http.Request) {
 	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
 	if err != nil {
 		badRequest(w, err)
@@ -127,11 +127,35 @@ func (handler *ApiHandler) UpdateEnvs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = handler.mn.CreateSecrets(context.Background(), applicationID, body.Environment, body.Secrets...)
+	err = handler.mn.UpdateVariables(context.Background(), applicationID, body.Environment, body.Secrets...)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
 
 	ok(w, "secrets updated", nil)
+}
+
+func (handler *ApiHandler) Rollback(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Identifier string `json:"identifier"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	if len(body.Identifier) < 10 {
+		badRequest(w, errors.New("invalid deployment identifier"))
+		return
+	}
+
+	result, err := handler.mn.Rollback(context.Background(), body.Identifier)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "rollback completed", result)
 }

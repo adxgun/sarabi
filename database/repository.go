@@ -29,4 +29,5 @@ type DeploymentRepository interface {
 	FindAll(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error)
 	FindByID(ctx context.Context, deploymentID uuid.UUID) (*types.Deployment, error)
 	UpdateDeploymentStatus(ctx context.Context, deploymentID uuid.UUID, newStatus string) error
+	FindByIdentifier(ctx context.Context, identifier string) ([]*types.Deployment, error)
 }

@@ -50,3 +50,15 @@ func (d *deploymentRepository) UpdateDeploymentStatus(ctx context.Context, deplo
 		Update("status", newStatus).
 		Error
 }
+
+func (d *deploymentRepository) FindByIdentifier(ctx context.Context, identifier string) ([]*types.Deployment, error) {
+	values := make([]*types.Deployment, 0)
+	err := d.db.WithContext(ctx).
+		Preload("Application").
+		Where("identifier = ?", identifier).
+		Find(&values).Error
+	if err != nil {
+		return nil, err
+	}
+	return values, nil
+}

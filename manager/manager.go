@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"io"
 	"os"
@@ -32,7 +33,8 @@ type (
 		ValidateToken(ctx context.Context, token string) error
 		CreateApplication(ctx context.Context, param types.CreateApplicationParams) (*types.Application, error)
 		Deploy(ctx context.Context, param *types.DeployParams) ([]*types.Deployment, error)
-		CreateSecrets(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
+		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
+		Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error)
 	}
 )
 
@@ -176,7 +178,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 	return deployments, nil
 }
 
-func (m *manager) CreateSecrets(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {
+func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {
 	logger.Info("new request",
 		zap.Any("paras", params),
 		zap.String("application_id", applicationID.String()),
@@ -244,6 +246,118 @@ func (m *manager) CreateSecrets(ctx context.Context, applicationID uuid.UUID, en
 	}
 
 	return nil
+}
+
+func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error) {
+	deployments, err := m.appService.FindDeploymentsByIdentifier(ctx, identifier)
+	if err != nil {
+		return nil, err
+	}
+
+	newIdentifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*types.Deployment, 0)
+	var beDeployment *types.Deployment
+	var feDeployment *types.Deployment
+
+	be := lo.Filter(deployments, func(item *types.Deployment, index int) bool {
+		return item.InstanceType == types.InstanceTypeFrontend
+	})
+	fe := lo.Filter(deployments, func(item *types.Deployment, index int) bool {
+		return item.InstanceType == types.InstanceTypeBackend
+	})
+	if len(be) > 0 {
+		beDeployment = be[0]
+	}
+	if len(fe) > 0 {
+		feDeployment = fe[0]
+	}
+
+	if beDeployment != nil {
+		vars, err := m.secretService.FindDeploymentSecrets(ctx, beDeployment.ID)
+		if err != nil {
+			return nil, err
+		}
+		createVarsParams := lo.Map(vars, func(item *types.Secret, index int) types.CreateSecretParams {
+			return types.CreateSecretParams{
+				Key:           item.Name,
+				Value:         item.Value,
+				ApplicationID: item.ApplicationID,
+				Environment:   item.Environment,
+				InstanceType:  types.InstanceType(item.InstanceType),
+			}
+		})
+		newBeDeployment, err := m.appService.CreateDeployment(ctx, types.CreateDeploymentParams{
+			ApplicationID: beDeployment.ApplicationID,
+			Environment:   beDeployment.Environment,
+			Instances:     beDeployment.Instances,
+			Port:          beDeployment.Port,
+			InstanceType:  beDeployment.InstanceType,
+			Identifier:    newIdentifier,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if err := m.store.Copy(ctx, beDeployment, newBeDeployment); err != nil {
+			return nil, err
+		}
+
+		newVars, err := m.secretService.CreateAll(ctx, createVarsParams...)
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.secretService.CreateDeploymentSecrets(ctx, newBeDeployment.ID, newVars)
+		if err != nil {
+			return nil, err
+		}
+
+		backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+		r, err := backend.Run(ctx, newBeDeployment.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := backend.Cleanup(ctx, r); err != nil {
+			logger.Warn("backend cleanup failed: ", zap.Error(err))
+		}
+		result = append(result, newBeDeployment)
+	}
+
+	if feDeployment != nil {
+		newFeDeployment, err := m.appService.CreateDeployment(ctx, types.CreateDeploymentParams{
+			ApplicationID: feDeployment.ApplicationID,
+			Environment:   feDeployment.Environment,
+			Instances:     feDeployment.Instances,
+			Port:          feDeployment.Port,
+			InstanceType:  feDeployment.InstanceType,
+			Identifier:    newIdentifier,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if err := m.store.Copy(ctx, feDeployment, newFeDeployment); err != nil {
+			return nil, err
+		}
+
+		frontend := frontendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+		r, err := frontend.Run(ctx, newFeDeployment.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := frontend.Cleanup(ctx, r); err != nil {
+			logger.Warn("frontend cleanup failed: ", zap.Error(err))
+		}
+		result = append(result, newFeDeployment)
+	}
+
+	return result, nil
 }
 
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {

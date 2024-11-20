@@ -18,6 +18,7 @@ type (
 		CreateDeployment(ctx context.Context, param types.CreateDeploymentParams) (*types.Deployment, error)
 		FindCurrentlyActiveDeployments(ctx context.Context, applicationID uuid.UUID, instanceType types.InstanceType) ([]*types.Deployment, error)
 		FindCurrentlyActiveDeploymentsEnv(ctx context.Context, applicationID uuid.UUID, instanceType types.InstanceType, environment string) (*types.Deployment, error)
+		FindDeploymentsByIdentifier(ctx context.Context, identifier string) ([]*types.Deployment, error)
 		UpdateDeploymentStatus(ctx context.Context, deploymentID uuid.UUID, status types.DeploymentStatus) error
 	}
 )
@@ -114,4 +115,8 @@ func (a *applicationService) CreateDeployment(ctx context.Context, param types.C
 	}
 
 	return a.deploymentRepository.FindByID(ctx, deployment.ID)
+}
+
+func (a *applicationService) FindDeploymentsByIdentifier(ctx context.Context, identifier string) ([]*types.Deployment, error) {
+	return a.deploymentRepository.FindByIdentifier(ctx, identifier)
 }
