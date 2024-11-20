@@ -33,6 +33,7 @@ type (
 		InstanceType  InstanceType // frontend, backend, database, proxy
 		Identifier    string
 		Application   Application `gorm:"foreignKey:ApplicationID"`
+		CreatedAt     time.Time
 	}
 
 	DeploymentStatus string

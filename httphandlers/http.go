@@ -3,6 +3,7 @@ package httphandlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -158,4 +159,34 @@ func (handler *ApiHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ok(w, "rollback completed", result)
+}
+
+func (handler *ApiHandler) Scale(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	var body struct {
+		Count int `json:"count"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	if body.Count <= 0 {
+		badRequest(w, fmt.Errorf("invalid instance count: %d", body.Count))
+		return
+	}
+
+	result, err := handler.mn.Scale(context.Background(), applicationID, body.Count)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "deployment changed", result)
 }

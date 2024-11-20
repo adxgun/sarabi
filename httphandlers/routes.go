@@ -10,8 +10,9 @@ func Routes(h *ApiHandler) chi.Router {
 	r.Route("/v1", func(rr chi.Router) {
 		rr.Post("/applications", h.CreateApplication)
 		rr.Post("/deploy", h.Deploy)
-		rr.Put("/applications/{application_id}/envs", h.UpdateVariables)
+		rr.Put("/applications/{application_id}/variables", h.UpdateVariables)
 		rr.Patch("/applications/rollback", h.Rollback)
+		rr.Patch("/applications/{application_id}/scale", h.Scale)
 
 		rr.Get("/h", func(writer http.ResponseWriter, request *http.Request) {
 			writer.WriteHeader(http.StatusOK)

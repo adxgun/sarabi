@@ -19,6 +19,7 @@ import (
 	"sarabi/logger"
 	"sarabi/service"
 	"sarabi/types"
+	"sort"
 )
 
 var (
@@ -35,6 +36,7 @@ type (
 		Deploy(ctx context.Context, param *types.DeployParams) ([]*types.Deployment, error)
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
 		Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error)
+		Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error)
 	}
 )
 
@@ -264,10 +266,10 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 	var feDeployment *types.Deployment
 
 	be := lo.Filter(deployments, func(item *types.Deployment, index int) bool {
-		return item.InstanceType == types.InstanceTypeFrontend
+		return item.InstanceType == types.InstanceTypeBackend
 	})
 	fe := lo.Filter(deployments, func(item *types.Deployment, index int) bool {
-		return item.InstanceType == types.InstanceTypeBackend
+		return item.InstanceType == types.InstanceTypeFrontend
 	})
 	if len(be) > 0 {
 		beDeployment = be[0]
@@ -358,6 +360,78 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 	}
 
 	return result, nil
+}
+
+func (m *manager) Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error) {
+	deployments, err := m.appService.FindCurrentlyActiveDeployments(ctx, applicationID, types.InstanceTypeBackend)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(deployments) == 0 {
+		return nil, errors.New("no active backend deployment found")
+	}
+
+	newIdentifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(deployments, func(i, j int) bool {
+		return deployments[i].CreatedAt.Before(deployments[j].CreatedAt)
+	})
+
+	beDeployment := deployments[0]
+	vars, err := m.secretService.FindDeploymentSecrets(ctx, beDeployment.ID)
+	if err != nil {
+		return nil, err
+	}
+	createVarsParams := lo.Map(vars, func(item *types.Secret, index int) types.CreateSecretParams {
+		return types.CreateSecretParams{
+			Key:           item.Name,
+			Value:         item.Value,
+			ApplicationID: item.ApplicationID,
+			Environment:   item.Environment,
+			InstanceType:  types.InstanceType(item.InstanceType),
+		}
+	})
+	newBeDeployment, err := m.appService.CreateDeployment(ctx, types.CreateDeploymentParams{
+		ApplicationID: beDeployment.ApplicationID,
+		Environment:   beDeployment.Environment,
+		Instances:     newInstanceCount,
+		Port:          beDeployment.Port,
+		InstanceType:  beDeployment.InstanceType,
+		Identifier:    newIdentifier,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := m.store.Copy(ctx, beDeployment, newBeDeployment); err != nil {
+		return nil, err
+	}
+
+	newVars, err := m.secretService.CreateAll(ctx, createVarsParams...)
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.secretService.CreateDeploymentSecrets(ctx, newBeDeployment.ID, newVars)
+	if err != nil {
+		return nil, err
+	}
+
+	backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+	r, err := backend.Run(ctx, newBeDeployment.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := backend.Cleanup(ctx, r); err != nil {
+		logger.Warn("backend cleanup failed: ", zap.Error(err))
+	}
+
+	return []*types.Deployment{newBeDeployment}, nil
 }
 
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {

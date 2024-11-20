@@ -14,6 +14,9 @@ type (
 		// the purpose of this is to enable support for deployment rollback.
 		// there is a different provision for purging out the binaries once they're old(60 days by default)
 		Save(ctx context.Context, artifact io.Reader, info *types.Deployment) error
+		// Copy make a copy of deployment artifacts(gzipped source code).
+		// e.g if deployment 'from' is stored at /var/sarabi/data/bins/{app_id}/deployments/{deployment_id},
+		// a new file will be created for 'to' and the artifact of 'from' will be copied into this new file
 		Copy(ctx context.Context, from, to *types.Deployment) error
 	}
 )
