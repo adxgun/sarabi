@@ -15,7 +15,8 @@ import (
 )
 
 var (
-	caddyImageName = "caddy:2.9"
+	// caddyImageName = "caddy:2.9"
+	caddyImageName = "adxgun/caddy-layer4:2.9"
 	// allow only localhost to access caddy via API
 	defaultCaddyApiConfigContent = `
 		{
@@ -97,6 +98,10 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 	}
 
 	if err := p.caddyClient.Wait(ctx, ProxyServerConfigUrl); err != nil {
+		return nil, err
+	}
+
+	if err := p.caddyClient.Init(ctx, ProxyServerConfigUrl); err != nil {
 		return nil, err
 	}
 

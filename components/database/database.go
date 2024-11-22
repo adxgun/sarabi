@@ -5,23 +5,29 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"sarabi/components"
+	proxycomponent "sarabi/components/proxy"
+	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
 	"sarabi/service"
+	"sarabi/types"
 )
 
 type databaseComponent struct {
 	dockerClient  docker.Docker
 	appService    service.ApplicationService
 	secretService service.SecretService
+	caddyClient   caddy.Client
 	dbProvider    Provider
 }
 
-func New(dc docker.Docker, appSvc service.ApplicationService, secretService service.SecretService, dbProvider Provider) components.Builder {
+func New(dc docker.Docker, appSvc service.ApplicationService, secretService service.SecretService,
+	dbProvider Provider, caddyClient caddy.Client) components.Builder {
 	return &databaseComponent{
 		dockerClient:  dc,
 		appService:    appSvc,
 		secretService: secretService,
 		dbProvider:    dbProvider,
+		caddyClient:   caddyClient,
 	}
 }
 
@@ -81,6 +87,15 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	}
 	startResp, err := d.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {
+		return nil, err
+	}
+
+	err = d.caddyClient.ApplyConfig(ctx, proxycomponent.ProxyServerConfigUrl, types.InstanceTypeDatabase, deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := d.caddyClient.Wait(ctx, proxycomponent.ProxyServerConfigUrl); err != nil {
 		return nil, err
 	}
 

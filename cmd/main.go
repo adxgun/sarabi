@@ -153,7 +153,7 @@ func _main() {
 
 	app, err := appService.Create(context.Background(), types.CreateApplicationParams{
 		Name:   "frontend-test-0",
-		Domain: "paas.local",
+		Name: "paas.local",
 	})
 
 	if err != nil {

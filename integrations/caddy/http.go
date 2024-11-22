@@ -34,7 +34,10 @@ func (c caddyHttpClient) Do(ctx context.Context, method, requestUrl string, body
 		if err != nil {
 			return err
 		}
-		logger.Info("caddy request", zap.String("req", string(bodyBin)), zap.Any("headers", req.Header))
+		logger.Info("caddy request",
+			zap.String("url", requestUrl),
+			zap.String("req", string(bodyBin)),
+			zap.Any("headers", req.Header))
 		req.Body = io.NopCloser(bytes.NewBuffer(bodyBin))
 	}
 	req.Header.Set("Content-Type", "application/json")

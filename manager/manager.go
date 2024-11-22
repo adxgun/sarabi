@@ -102,7 +102,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		}
 
 		dbComponent := databasecomponent.New(m.dockerClient, m.appService,
-			m.secretService, databasecomponent.NewProvider(param.StorageEngine))
+			m.secretService, databasecomponent.NewProvider(param.StorageEngine), m.caddyClient)
 		if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
 			return nil, err
 		}

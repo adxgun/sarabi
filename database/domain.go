@@ -1,0 +1,55 @@
+package database
+
+import (
+	"context"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"sarabi/types"
+)
+
+type (
+	DomainRepository interface {
+		Save(ctx context.Context, domain *types.Domain) error
+		FindByID(ctx context.Context, id uuid.UUID) (*types.Domain, error)
+		Find(ctx context.Context, name string) (*types.Domain, error)
+	}
+
+	domainRepository struct {
+		db *gorm.DB
+	}
+)
+
+func NewDomainRepository() DomainRepository {
+	return &domainRepository{}
+}
+
+func (d *domainRepository) Save(ctx context.Context, domain *types.Domain) error {
+	return d.db.
+		WithContext(ctx).
+		Save(domain).
+		Error
+}
+
+func (d *domainRepository) FindByID(ctx context.Context, id uuid.UUID) (*types.Domain, error) {
+	domain := &types.Domain{}
+	err := d.db.
+		WithContext(ctx).
+		Where("id = ?", id).
+		First(domain).Error
+	if err != nil {
+		return nil, err
+	}
+	return domain, nil
+}
+
+func (d *domainRepository) Find(ctx context.Context, name string) (*types.Domain, error) {
+	domain := &types.Domain{}
+	err := d.db.
+		WithContext(ctx).
+		Where("name = ?", name).
+		First(domain).Error
+	if err != nil {
+		return nil, err
+	}
+	return domain, nil
+}

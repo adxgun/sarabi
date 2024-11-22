@@ -8,3 +8,7 @@ client
 daemon.json
 .idea
 sarabi.aes
+docker-compose.yml
+dynamic-config.yml
+traefik.yml
+layer4
