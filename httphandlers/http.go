@@ -190,3 +190,50 @@ func (handler *ApiHandler) Scale(w http.ResponseWriter, r *http.Request) {
 
 	ok(w, "deployment changed", result)
 }
+
+func (handler *ApiHandler) AddDomain(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	params := &types.AddDomainParams{}
+	if err := json.NewDecoder(r.Body).Decode(params); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	domain, err := handler.mn.AddDomain(context.Background(), applicationID, *params)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "domain added", domain)
+}
+
+func (handler *ApiHandler) RemoveDomain(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	var body struct {
+		Name string `json:"name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	err = handler.mn.RemoveDomain(context.Background(), applicationID, body.Name)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "domain removed", nil)
+}

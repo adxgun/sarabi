@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	proxycomponent "sarabi/components/proxy"
 	"sarabi/database"
 	"sarabi/integrations/caddy"
 	"sarabi/types"
@@ -15,21 +14,19 @@ import (
 type (
 	DomainService interface {
 		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
-		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
+		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types.Domain, error)
 	}
 
 	domainService struct {
-		caddyClient        caddy.Client
-		domainRepository   database.DomainRepository
-		applicationService ApplicationService
+		caddyClient      caddy.Client
+		domainRepository database.DomainRepository
 	}
 )
 
-func NewDomainService(caddyClient caddy.Client, domainRepo database.DomainRepository, appService ApplicationService) DomainService {
+func NewDomainService(caddyClient caddy.Client, domainRepo database.DomainRepository) DomainService {
 	return &domainService{
-		caddyClient:        caddyClient,
-		domainRepository:   domainRepo,
-		applicationService: appService,
+		caddyClient:      caddyClient,
+		domainRepository: domainRepo,
 	}
 }
 
@@ -56,20 +53,18 @@ func (d *domainService) AddDomain(ctx context.Context, applicationID uuid.UUID, 
 		return nil, err
 	}
 
-	deployment, err := d.applicationService.FindCurrentlyActiveDeploymentsEnv(ctx, applicationID,
-		params.InstanceType, params.Environment)
-	if err != nil {
-		return nil, err
-	}
-
-	err = d.caddyClient.ApplyDomainConfig(ctx, proxycomponent.ProxyServerConfigUrl, newDomain, deployment, types.DomainOperationAdd)
-	if err != nil {
-		return nil, err
-	}
 	return newDomain, nil
 }
 
-func (d *domainService) RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error {
-	//TODO implement me
-	panic("implement me")
+func (d *domainService) RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types.Domain, error) {
+	domain, err := d.domainRepository.Find(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if domain.ApplicationID != applicationID {
+		return nil, errors.New("access denied")
+	}
+
+	return domain, d.domainRepository.Delete(ctx, domain.ID)
 }

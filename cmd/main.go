@@ -82,11 +82,13 @@ func setup() (*http.Server, error, func() error) {
 	deploymentSecretRepo := database.NewDeploymentSecretRepository(db)
 	appRepo := database.NewApplicationRepository(db)
 	secretRepo := database.NewSecretRepository(db)
+	domainRepo := database.NewDomainRepository(db)
 
 	encryptor := sarabi.NewEncryptor()
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo)
-	caddyClient := caddy.NewCaddyClient(appService)
+	caddyClient := caddy.NewCaddyClient()
+	domainService := service.NewDomainService(caddyClient, domainRepo)
 
 	caddyProxy := proxycomponent.New(docker, appService, caddyClient)
 	result, err := caddyProxy.Run(context.Background(), uuid.Nil)
@@ -94,7 +96,7 @@ func setup() (*http.Server, error, func() error) {
 		return nil, err, nil
 	}
 
-	mn := manager.New(appService, secretService, docker, caddyClient, bundler.NewArtifactStore())
+	mn := manager.New(appService, secretService, docker, caddyClient, bundler.NewArtifactStore(), domainService)
 	apiHandler := httphandlers.NewApiHandler(mn)
 	routes := httphandlers.Routes(apiHandler)
 

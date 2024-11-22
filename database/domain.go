@@ -12,6 +12,7 @@ type (
 		Save(ctx context.Context, domain *types.Domain) error
 		FindByID(ctx context.Context, id uuid.UUID) (*types.Domain, error)
 		Find(ctx context.Context, name string) (*types.Domain, error)
+		Delete(ctx context.Context, id uuid.UUID) error
 	}
 
 	domainRepository struct {
@@ -19,8 +20,8 @@ type (
 	}
 )
 
-func NewDomainRepository() DomainRepository {
-	return &domainRepository{}
+func NewDomainRepository(db *gorm.DB) DomainRepository {
+	return &domainRepository{db: db}
 }
 
 func (d *domainRepository) Save(ctx context.Context, domain *types.Domain) error {
@@ -52,4 +53,11 @@ func (d *domainRepository) Find(ctx context.Context, name string) (*types.Domain
 		return nil, err
 	}
 	return domain, nil
+}
+
+func (d *domainRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return d.db.
+		WithContext(ctx).
+		Where("id = ?", id).
+		Delete(&types.Domain{}).Error
 }

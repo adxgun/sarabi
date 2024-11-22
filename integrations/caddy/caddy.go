@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sarabi"
 	"sarabi/logger"
-	"sarabi/service"
 	"sarabi/types"
 	"time"
 )
@@ -35,11 +34,10 @@ type Client interface {
 
 type caddyClient struct {
 	httpClient HttpClient
-	appService service.ApplicationService
 }
 
-func NewCaddyClient(appService service.ApplicationService) Client {
-	return &caddyClient{httpClient: newCaddyHttpClient(), appService: appService}
+func NewCaddyClient() Client {
+	return &caddyClient{httpClient: newCaddyHttpClient()}
 }
 
 func (c *caddyClient) Init(ctx context.Context, caddyUrl string) error {

@@ -13,6 +13,8 @@ func Routes(h *ApiHandler) chi.Router {
 		rr.Put("/applications/{application_id}/variables", h.UpdateVariables)
 		rr.Patch("/applications/rollback", h.Rollback)
 		rr.Patch("/applications/{application_id}/scale", h.Scale)
+		rr.Post("/applications/{application_id}/domains", h.AddDomain)
+		rr.Delete("/applications/{application_id}/domains", h.RemoveDomain)
 
 		rr.Get("/h", func(writer http.ResponseWriter, request *http.Request) {
 			writer.WriteHeader(http.StatusOK)

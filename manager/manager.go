@@ -14,6 +14,7 @@ import (
 	backendcomponent "sarabi/components/backend"
 	databasecomponent "sarabi/components/database"
 	frontendcomponent "sarabi/components/frontend"
+	proxycomponent "sarabi/components/proxy"
 	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
 	"sarabi/logger"
@@ -29,6 +30,10 @@ var (
 	ServerKeyFilePath = Path + "/certs/server.key"
 )
 
+/*
+
+ */
+
 type (
 	Manager interface {
 		ValidateToken(ctx context.Context, token string) error
@@ -37,6 +42,8 @@ type (
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
 		Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error)
+		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
+		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
 	}
 )
 
@@ -46,16 +53,18 @@ type manager struct {
 	dockerClient  docker.Docker
 	caddyClient   caddy.Client
 	store         bundler.ArtifactStore
+	domainService service.DomainService
 }
 
 func New(applicationService service.ApplicationService, secretService service.SecretService,
-	dockerClient docker.Docker, caddyClient caddy.Client, st bundler.ArtifactStore) Manager {
+	dockerClient docker.Docker, caddyClient caddy.Client, st bundler.ArtifactStore, dms service.DomainService) Manager {
 	return &manager{
 		appService:    applicationService,
 		secretService: secretService,
 		dockerClient:  dockerClient,
 		caddyClient:   caddyClient,
 		store:         st,
+		domainService: dms,
 	}
 }
 
@@ -432,6 +441,44 @@ func (m *manager) Scale(ctx context.Context, applicationID uuid.UUID, newInstanc
 	}
 
 	return []*types.Deployment{newBeDeployment}, nil
+}
+
+func (m *manager) AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error) {
+	domain, err := m.domainService.AddDomain(ctx, applicationID, params)
+	if err != nil {
+		return nil, err
+	}
+
+	deployment, err := m.appService.FindCurrentlyActiveDeploymentsEnv(ctx, applicationID,
+		params.InstanceType, params.Environment)
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.caddyClient.ApplyDomainConfig(ctx, proxycomponent.ProxyServerConfigUrl, domain, deployment, types.DomainOperationAdd)
+	if err != nil {
+		return nil, err
+	}
+	return domain, nil
+}
+
+func (m *manager) RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error {
+	removed, err := m.domainService.RemoveDomain(ctx, applicationID, name)
+	if err != nil {
+		return err
+	}
+
+	deployment, err := m.appService.FindCurrentlyActiveDeploymentsEnv(ctx, applicationID,
+		removed.InstanceType, removed.Environment)
+	if err != nil {
+		return err
+	}
+
+	err = m.caddyClient.ApplyDomainConfig(ctx, proxycomponent.ProxyServerConfigUrl, removed, deployment, types.DomainOperationRemove)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {
