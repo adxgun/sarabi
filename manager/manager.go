@@ -95,11 +95,17 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 	}
 
 	if param.Backend != nil {
+		dbPort, err := sarabi.DefaultPortGenerator.Generate()
+		if err != nil {
+			return nil, err
+		}
+
 		dbDeployment, err := m.appService.CreateDeployment(ctx, types.CreateDeploymentParams{
 			ApplicationID: param.ApplicationID,
 			Environment:   param.Environment,
 			InstanceType:  types.InstanceTypeDatabase,
 			Identifier:    identifier,
+			Port:          dbPort,
 		})
 		if err != nil {
 			return nil, errors2.Wrap(err, "failed to create database deployment")
@@ -112,7 +118,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		}
 
 		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, time.Minute*1); err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to initialize auto-backup")
 		}
 
 		appPort, err := sarabi.DefaultPortGenerator.Generate()
@@ -130,7 +136,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		}
 		backendDeployment, err = m.appService.CreateDeployment(ctx, createBackend)
 		if err != nil {
-			return nil, errors2.Wrap(err, "failed to create backend deployment")
+			return nil, errors2.Wrap(err, "failed to save backend deployment")
 		}
 
 		if err := m.store.Save(ctx, param.Backend, backendDeployment); err != nil {
