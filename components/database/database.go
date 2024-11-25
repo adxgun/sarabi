@@ -9,6 +9,7 @@ import (
 	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
 	"sarabi/service"
+	"sarabi/storage"
 	"sarabi/types"
 )
 
@@ -77,7 +78,10 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		envs = append(envs, ss.Env())
 	}
 
-	volumeMounts := []string{fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), d.dbProvider.DataPath())}
+	volumeMounts := []string{
+		fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), d.dbProvider.DataPath()),
+		storage.BackupTempDir + ":" + storage.BackupTempDir,
+	}
 	params := docker.StartContainerParams{
 		Image:        d.dbProvider.Image(),
 		Container:    d.dbProvider.ContainerName(deployment),

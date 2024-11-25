@@ -37,10 +37,13 @@ func (a *applicationService) Create(ctx context.Context, params types.CreateAppl
 		return app, nil
 	}
 
+	engine := make(types.StorageEngines, 0)
+	engine = append(engine, types.StorageEngine(params.StorageEngine))
 	app := &types.Application{
-		ID:     uuid.New(),
-		Name:   params.Name,
-		Domain: params.Domain,
+		ID:             uuid.New(),
+		Name:           params.Name,
+		Domain:         params.Domain,
+		StorageEngines: engine,
 	}
 	if err := a.applicationRepository.Save(ctx, app); err != nil {
 		return nil, err

@@ -1,6 +1,9 @@
 package types
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -15,12 +18,13 @@ var (
 
 type (
 	Application struct {
-		ID        uuid.UUID `gorm:"primaryKey"`
-		Name      string
-		Domain    string
-		CreatedAt time.Time
-		UpdatedAt time.Time
-		DeletedAt gorm.DeletedAt `gorm:"index"`
+		ID             uuid.UUID `gorm:"primaryKey"`
+		Name           string
+		Domain         string
+		StorageEngines StorageEngines
+		CreatedAt      time.Time
+		UpdatedAt      time.Time
+		DeletedAt      gorm.DeletedAt `gorm:"index"`
 	}
 
 	Deployment struct {
@@ -42,8 +46,9 @@ type (
 
 type (
 	CreateApplicationParams struct {
-		Name   string `json:"name"`
-		Domain string `json:"domain"`
+		Name          string `json:"name"`
+		Domain        string `json:"domain"`
+		StorageEngine string `json:"storage_engine"`
 	}
 
 	DeployParams struct {
@@ -66,6 +71,7 @@ type (
 )
 
 type StorageEngine string
+type StorageEngines []StorageEngine
 
 const (
 	StorageEnginePostgres StorageEngine = "postgres"
@@ -78,6 +84,32 @@ const (
 	DeploymentStatusCreated DeploymentStatus = "CREATED"
 	DeploymentStatusStopped DeploymentStatus = "STOPPED"
 )
+
+func (s StorageEngine) Value() (driver.Value, error) {
+	return string(s), nil
+}
+
+func (s *StorageEngine) Scan(value interface{}) error {
+	v, ok := value.(string)
+	if !ok {
+		return errors.New("failed to scan StorageEngine: type assertion to string failed")
+	}
+
+	*s = StorageEngine(v)
+	return nil
+}
+
+func (s StorageEngines) Value() (driver.Value, error) {
+	return json.Marshal(s)
+}
+
+func (s *StorageEngines) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan []StorageEngine: type assertion to []byte failed")
+	}
+	return json.Unmarshal(bytes, s)
+}
 
 const (
 	InstanceTypeFrontend InstanceType = "frontend"

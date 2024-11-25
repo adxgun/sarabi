@@ -18,7 +18,8 @@ func Open(dir string) (*gorm.DB, error) {
 		&types.Secret{},
 		&types.Deployment{},
 		&types.DeploymentSecret{},
-		&types.Domain{}); err != nil {
+		&types.Domain{},
+		&types.BackupSettings{}); err != nil {
 		return nil, err
 	}
 

@@ -1,6 +1,7 @@
 package databasecomponent
 
 import (
+	"sarabi/components/database/providers/mysql"
 	"sarabi/components/database/providers/postgres"
 	"sarabi/types"
 )
@@ -25,6 +26,8 @@ func NewProvider(engine types.StorageEngine) Provider {
 	switch engine {
 	case types.StorageEnginePostgres:
 		return postgres.New()
+	case types.StorageEngineMysql:
+		return mysql.New()
 	default:
 		panic("unsupported engine " + string(engine))
 	}

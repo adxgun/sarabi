@@ -10,6 +10,7 @@ type ApplicationRepository interface {
 	Save(ctx context.Context, app *types.Application) error
 	FindByID(ctx context.Context, id uuid.UUID) (*types.Application, error)
 	FindByName(ctx context.Context, name string) (*types.Application, error)
+	FindAll(ctx context.Context) ([]*types.Application, error)
 }
 
 type SecretRepository interface {
@@ -30,4 +31,17 @@ type DeploymentRepository interface {
 	FindByID(ctx context.Context, deploymentID uuid.UUID) (*types.Deployment, error)
 	UpdateDeploymentStatus(ctx context.Context, deploymentID uuid.UUID, newStatus string) error
 	FindByIdentifier(ctx context.Context, identifier string) ([]*types.Deployment, error)
+}
+
+type DomainRepository interface {
+	Save(ctx context.Context, domain *types.Domain) error
+	FindByID(ctx context.Context, id uuid.UUID) (*types.Domain, error)
+	Find(ctx context.Context, name string) (*types.Domain, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+type BackupSettingsRepository interface {
+	Save(ctx context.Context, settings *types.BackupSettings) error
+	FindAll(ctx context.Context) ([]*types.BackupSettings, error)
+	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.BackupSettings, error)
 }

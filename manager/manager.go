@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
+	errors2 "github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"io"
@@ -19,20 +20,11 @@ import (
 	"sarabi/integrations/docker"
 	"sarabi/logger"
 	"sarabi/service"
+	"sarabi/storage"
 	"sarabi/types"
 	"sort"
+	"time"
 )
-
-var (
-	Path              = "/var/sarabi/data"
-	DBDir             = Path + "/sarabi.db"
-	ServerCrtFilePath = Path + "/certs/server.crt"
-	ServerKeyFilePath = Path + "/certs/server.key"
-)
-
-/*
-
- */
 
 type (
 	Manager interface {
@@ -54,10 +46,12 @@ type manager struct {
 	caddyClient   caddy.Client
 	store         bundler.ArtifactStore
 	domainService service.DomainService
+	backupService service.BackupService
 }
 
 func New(applicationService service.ApplicationService, secretService service.SecretService,
-	dockerClient docker.Docker, caddyClient caddy.Client, st bundler.ArtifactStore, dms service.DomainService) Manager {
+	dockerClient docker.Docker, caddyClient caddy.Client,
+	st bundler.ArtifactStore, dms service.DomainService, backup service.BackupService) Manager {
 	return &manager{
 		appService:    applicationService,
 		secretService: secretService,
@@ -65,11 +59,12 @@ func New(applicationService service.ApplicationService, secretService service.Se
 		caddyClient:   caddyClient,
 		store:         st,
 		domainService: dms,
+		backupService: backup,
 	}
 }
 
 func (m *manager) ValidateToken(ctx context.Context, token string) error {
-	tokenPath := filepath.Join(Path, "auth.secure")
+	tokenPath := filepath.Join(storage.Path, "auth.secure")
 	fi, err := os.Open(tokenPath)
 	if err != nil {
 		return err
@@ -107,18 +102,22 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 			Identifier:    identifier,
 		})
 		if err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to create database deployment")
 		}
 
 		dbComponent := databasecomponent.New(m.dockerClient, m.appService,
 			m.secretService, databasecomponent.NewProvider(param.StorageEngine), m.caddyClient)
 		if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
+			return nil, errors2.Wrap(err, "failed to run database component")
+		}
+
+		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, time.Minute*1); err != nil {
 			return nil, err
 		}
 
 		appPort, err := sarabi.DefaultPortGenerator.Generate()
 		if err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to allocate port")
 		}
 
 		createBackend := types.CreateDeploymentParams{
@@ -131,15 +130,15 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		}
 		backendDeployment, err = m.appService.CreateDeployment(ctx, createBackend)
 		if err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to create backend deployment")
 		}
 
 		if err := m.store.Save(ctx, param.Backend, backendDeployment); err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to save backend artifact")
 		}
 
 		if err := m.setupAppSecrets(ctx, backendDeployment); err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to setup app variables")
 		}
 
 		deployments = append(deployments, backendDeployment)
@@ -155,10 +154,10 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		}
 		fd, err := m.appService.CreateDeployment(ctx, createFrontend)
 		if err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to create frontend deployment")
 		}
 		if err := m.store.Save(ctx, param.Frontend, fd); err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to save frontend artifact")
 		}
 		frontendDeployment = fd
 		deployments = append(deployments, frontendDeployment)
@@ -168,7 +167,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
 		result, err := backend.Run(ctx, backendDeployment.ID)
 		if err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to run backend component")
 		}
 
 		if err := backend.Cleanup(ctx, result); err != nil {
@@ -180,18 +179,17 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		frontend := frontendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
 		result, err := frontend.Run(ctx, frontendDeployment.ID)
 		if err != nil {
-			return nil, err
+			return nil, errors2.Wrap(err, "failed to frontend component")
 		}
 		if err := frontend.Cleanup(ctx, result); err != nil {
-			return nil, err
+			logger.Warn("cleanup failed: ", zap.Error(err))
 		}
 	}
 	return deployments, nil
 }
 
 func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {
-	logger.Info("new request",
-		zap.Any("paras", params),
+	logger.Info("new update var request",
 		zap.String("application_id", applicationID.String()),
 		zap.String("env", environment))
 

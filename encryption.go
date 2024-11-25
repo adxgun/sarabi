@@ -30,7 +30,7 @@ func NewEncryptor() Encryptor {
 
 // GenerateKey generates a random [32]byte encryption key and stores it in /sarabi_path/sarabi.aes
 // this function checks for an existing key and return that if available.
-// the generated key should be kept safe outside of this server(aka backup) in-case of data loss, in order to be able to retrieve
+// the generated key should be kept safe outside of this server(aka storage) in-case of data loss, in order to be able to retrieve
 // encrypted data(mainly application variables/secrets)
 func (e *encryptor) GenerateKey() ([]byte, error) {
 	if _, err := os.Stat(encryptionKeyFile); err == nil {

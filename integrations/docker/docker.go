@@ -34,6 +34,7 @@ type Docker interface {
 	CopyFileIntoContainer(ctx context.Context, containerName, src, dest string) error
 	ExtractFiles(ctx context.Context, containerName, fileDir string) error
 	ConnectContainer(ctx context.Context, containerName, networkName string) error
+	ContainerExec(ctx context.Context, params ContainerExecParams) (io.ReadCloser, error)
 }
 
 type dockerClient struct {
@@ -308,6 +309,42 @@ func (d *dockerClient) ExtractFiles(ctx context.Context, containerName, fileDir 
 
 func (d *dockerClient) ConnectContainer(ctx context.Context, containerName, networkName string) error {
 	return d.hostClient.NetworkConnect(ctx, networkName, containerName, nil)
+}
+
+func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (io.ReadCloser, error) {
+	execID, err := d.hostClient.ContainerExecCreate(ctx, params.ContainerName, container.ExecOptions{
+		Env:          params.Envs,
+		Cmd:          params.Cmd,
+		AttachStderr: true,
+		AttachStdout: true,
+		Privileged:   true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	hr, err := d.hostClient.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	_, stdErr, err := readExecResponse(hr.Conn)
+	if err != nil {
+		return nil, err
+	}
+	execResponse, err := d.hostClient.ContainerExecInspect(ctx, execID.ID)
+	if err != nil {
+		return nil, err
+	}
+	if execResponse.ExitCode != 0 {
+		return nil, fmt.Errorf("failed to run cmd: %s", stdErr)
+	}
+
+	r, _, err := d.hostClient.CopyFromContainer(ctx, params.ContainerName, params.ResultPath)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 func (d *dockerClient) wait(ctx context.Context, containerID string) {

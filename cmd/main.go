@@ -19,6 +19,7 @@ import (
 	"sarabi/logger"
 	"sarabi/manager"
 	"sarabi/service"
+	"sarabi/storage"
 	"syscall"
 	"time"
 )
@@ -73,7 +74,7 @@ func setup() (*http.Server, error, func() error) {
 		return nil, err, nil
 	}
 
-	db, err := database.Open(manager.DBDir)
+	db, err := database.Open(storage.DBDir)
 	if err != nil {
 		return nil, err, nil
 	}
@@ -83,6 +84,7 @@ func setup() (*http.Server, error, func() error) {
 	appRepo := database.NewApplicationRepository(db)
 	secretRepo := database.NewSecretRepository(db)
 	domainRepo := database.NewDomainRepository(db)
+	backupSettingsRepo := database.NewBackupSettingsRepository(db)
 
 	encryptor := sarabi.NewEncryptor()
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
@@ -90,13 +92,19 @@ func setup() (*http.Server, error, func() error) {
 	caddyClient := caddy.NewCaddyClient()
 	domainService := service.NewDomainService(caddyClient, domainRepo)
 
+	backupSvc := service.NewBackupService(docker, appService, secretService, storage.NewFileStorage(), backupSettingsRepo)
+	if err := backupSvc.Run(context.Background()); err != nil {
+		return nil, err, nil
+	}
+
 	caddyProxy := proxycomponent.New(docker, appService, caddyClient)
 	result, err := caddyProxy.Run(context.Background(), uuid.Nil)
 	if err != nil {
 		return nil, err, nil
 	}
 
-	mn := manager.New(appService, secretService, docker, caddyClient, bundler.NewArtifactStore(), domainService)
+	mn := manager.New(appService, secretService, docker, caddyClient,
+		bundler.NewArtifactStore(), domainService, backupSvc)
 	apiHandler := httphandlers.NewApiHandler(mn)
 	routes := httphandlers.Routes(apiHandler)
 

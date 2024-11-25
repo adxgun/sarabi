@@ -2,7 +2,10 @@ package docker
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"github.com/docker/docker/api/types/strslice"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"io"
@@ -39,7 +42,14 @@ type StartContainerParams struct {
 	PortBindings nat.PortMap
 }
 
-func readRemoteResponse(body io.ReadCloser) ([]RemoteResponse, error) {
+type ContainerExecParams struct {
+	ContainerName string
+	ResultPath    string
+	Cmd           strslice.StrSlice
+	Envs          []string
+}
+
+func readRemoteResponse(body io.Reader) ([]RemoteResponse, error) {
 	resp := make([]RemoteResponse, 0)
 	scanner := bufio.NewScanner(body)
 	for scanner.Scan() {
@@ -57,4 +67,13 @@ func readRemoteResponse(body io.ReadCloser) ([]RemoteResponse, error) {
 	}
 
 	return resp, nil
+}
+
+func readExecResponse(reader io.Reader) (string, string, error) {
+	var stdOut, stdErr bytes.Buffer
+	_, err := stdcopy.StdCopy(&stdOut, &stdErr, reader)
+	if err != nil {
+		return "", "", err
+	}
+	return stdOut.String(), stdErr.String(), nil
 }

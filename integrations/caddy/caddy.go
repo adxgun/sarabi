@@ -84,7 +84,7 @@ func (c *caddyClient) ApplyConfig(ctx context.Context, caddyUrl string, instance
 
 // Wait issues a call to /config/ endpoint
 // the aim is to wait until caddy is running and available to process request(s).
-// featuring exponential backup and eventual failure after 10 trials
+// featuring exponential storage and eventual failure after 10 trials
 func (c *caddyClient) Wait(ctx context.Context, caddyUrl string) error {
 	var (
 		retries = 10

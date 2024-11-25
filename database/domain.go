@@ -8,13 +8,6 @@ import (
 )
 
 type (
-	DomainRepository interface {
-		Save(ctx context.Context, domain *types.Domain) error
-		FindByID(ctx context.Context, id uuid.UUID) (*types.Domain, error)
-		Find(ctx context.Context, name string) (*types.Domain, error)
-		Delete(ctx context.Context, id uuid.UUID) error
-	}
-
 	domainRepository struct {
 		db *gorm.DB
 	}
