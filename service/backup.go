@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"github.com/docker/docker/api/types/strslice"
+	"errors"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/google/uuid"
 	errors2 "github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
+	"sarabi/backup"
 	"sarabi/database"
 	"sarabi/integrations/docker"
 	"sarabi/logger"
@@ -22,6 +22,8 @@ type (
 	BackupService interface {
 		Run(ctx context.Context) error
 		CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, duration time.Duration) error
+		Download(ctx context.Context, backupID uuid.UUID) (*types.File, error)
+		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 	}
 
 	backupService struct {
@@ -29,13 +31,14 @@ type (
 		applicationService       ApplicationService
 		secretService            SecretService
 		backupSettingsRepository database.BackupSettingsRepository
+		backupRepository         database.BackupRepository
 		scheduler                gocron.Scheduler
 		started                  bool
 	}
 )
 
 func NewBackupService(dc docker.Docker, service ApplicationService,
-	ss SecretService, backupSettings database.BackupSettingsRepository) (BackupService, error) {
+	ss SecretService, backupSettings database.BackupSettingsRepository, repository database.BackupRepository) (BackupService, error) {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
 		return nil, err
@@ -46,6 +49,7 @@ func NewBackupService(dc docker.Docker, service ApplicationService,
 		secretService:            ss,
 		backupSettingsRepository: backupSettings,
 		scheduler:                scheduler,
+		backupRepository:         repository,
 	}, nil
 }
 
@@ -78,23 +82,48 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 		return types.InstanceType(item.InstanceType) == types.InstanceTypeDatabase &&
 			item.Environment == settings.Environment
 	})
+	storageCred, _ := b.findStorageCredential(ctx, application)
+	param := backup.ExecuteParams{
+		Environment:       settings.Environment,
+		DatabaseVars:      dbVars,
+		StorageCredential: storageCred,
+		Application:       application,
+	}
 
 	for _, se := range application.StorageEngines {
+		var result backup.ExecuteResponse
+		var backuperr error
 		switch se {
 		case types.StorageEnginePostgres:
-			err = b.postgresBackup(ctx, application, dbVars, settings.Environment)
-			if err != nil {
-				logger.Error("pg backup returned error",
-					zap.Error(err))
-			} else {
-				logger.Info("backup completed",
-					zap.String("application", application.Name),
-					zap.String("environment", settings.Environment),
-					zap.String("engine", string(se)),
-					zap.String("ts", time.Now().String()))
-			}
+			bk := backup.NewPostgres(b.dockerClient)
+			result, backuperr = bk.Execute(ctx, param)
 		default:
 			return nil
+		}
+
+		if backuperr != nil {
+			logger.Error("backup returned error",
+				zap.Error(backuperr),
+				zap.Any("storage_engine", se))
+		} else {
+			logger.Info("backup completed",
+				zap.String("application", application.Name),
+				zap.String("environment", settings.Environment),
+				zap.String("engine", string(se)),
+				zap.String("ts", time.Now().String()))
+
+			newBackup := &types.Backup{
+				ID:            uuid.New(),
+				ApplicationID: application.ID,
+				Environment:   settings.Environment,
+				CreatedAt:     time.Now(),
+				StorageEngine: se,
+				Location:      result.Location,
+				StorageType:   string(result.StorageType),
+			}
+			if err := b.backupRepository.Save(ctx, newBackup); err != nil {
+				logger.Error("failed to save backup", zap.Error(err))
+			}
 		}
 	}
 
@@ -119,54 +148,6 @@ func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSetting
 	}
 	b.started = true
 	return nil
-}
-
-func (b backupService) postgresBackup(ctx context.Context, application *types.Application, vars []*types.Secret, environment string) error {
-	logger.Info("starting postgres backup",
-		zap.Any("application", application.Name),
-		zap.String("env", environment))
-	uName, err := FindSecret("POSTGRES_USER", vars)
-	if err != nil {
-		return err
-	}
-	password, err := FindSecret("POSTGRES_PASSWORD", vars)
-	if err != nil {
-		return err
-	}
-	dbName, err := FindSecret("POSTGRES_DB", vars)
-	if err != nil {
-		return err
-	}
-
-	st, err := b.storage(ctx, application)
-	if err != nil {
-		return err
-	}
-
-	resultPath := fmt.Sprintf("tmp/%s.sql", uuid.NewString())
-	cmd := strslice.StrSlice{
-		"pg_dump",
-		"-U", uName.Value,
-		"-d", dbName.Value,
-		"-f", resultPath,
-	}
-	envs := []string{
-		"PGPASSWORD=" + password.Value,
-	}
-
-	// /var/sarabi/data/backups/application_name-env/postgres_current_timestamp_formatted.sql
-	location := fmt.Sprintf("%s/%s-%s/postgres-%s.sql", storage.BackupDir, application.Name, environment, time.Now().Format("2006_01_02_03_04pm"))
-	r, err := b.dockerClient.ContainerExec(ctx, docker.ContainerExecParams{
-		ContainerName: fmt.Sprintf("postgres-%s-%s", application.Name, environment),
-		ResultPath:    resultPath,
-		Cmd:           cmd,
-		Envs:          envs,
-	})
-	if err != nil {
-		return errors2.Wrap(err, "failed to execute pg_dump")
-	}
-
-	return st.Save(ctx, location, r)
 }
 
 func (b backupService) CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, duration time.Duration) error {
@@ -195,6 +176,36 @@ func (b backupService) CreateBackupSettings(ctx context.Context, applicationID u
 	}
 
 	return b.runScheduler(ctx, backupSettings)
+}
+
+func (b backupService) Download(ctx context.Context, backupID uuid.UUID) (*types.File, error) {
+	bk, err := b.backupRepository.FindByID(ctx, backupID)
+	if err != nil {
+		return nil, err
+	}
+
+	cred, crederr := b.findStorageCredential(ctx, bk.Application)
+	var st storage.Storage
+	switch storage.Type(bk.StorageType) {
+	case storage.TypeFS:
+		st = storage.NewFileStorage()
+	case storage.TypeS3:
+		if cred == nil {
+			return nil, errors2.Wrap(crederr, "failed to find object storage credential")
+		}
+		st, err = storage.NewS3Storage(*cred)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.New("unknown storage type")
+	}
+
+	return st.Get(ctx, bk.Location)
+}
+
+func (b backupService) ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error) {
+	return b.backupRepository.FindByApplicationID(ctx, applicationID)
 }
 
 func (b backupService) findStorageCredential(ctx context.Context, application *types.Application) (*types.StorageCredentials, error) {
@@ -227,14 +238,4 @@ func (b backupService) findStorageCredential(ctx context.Context, application *t
 		SecretKey: secretAccessKey.Value,
 		Region:    regionStr,
 	}, nil
-}
-
-func (b backupService) storage(ctx context.Context, application *types.Application) (storage.Storage, error) {
-	cred, err := b.findStorageCredential(ctx, application)
-	if err != nil {
-		logger.Info("cannot find S3-compatible credentials, fallback to file storage backup",
-			zap.Error(err))
-		return storage.NewFileStorage(), nil
-	}
-	return storage.NewS3Storage(*cred)
 }

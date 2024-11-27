@@ -52,3 +52,9 @@ type CredentialRepository interface {
 	UpdateCredentialValue(ctx context.Context, id uuid.UUID, newValue string) error
 	FindByName(ctx context.Context, applicationID uuid.UUID, provider, key string) (*types.Credential, error)
 }
+
+type BackupRepository interface {
+	Save(ctx context.Context, bc *types.Backup) error
+	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*types.Backup, error)
+}

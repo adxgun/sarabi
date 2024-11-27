@@ -83,7 +83,7 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), d.dbProvider.DataPath()),
 		storage.BackupTempDir + ":" + storage.BackupTempDir,
 	}
-	tcpPort, _ := nat.NewPort("tcp", deployment.Port)
+	tcpPort, _ := nat.NewPort("tcp", d.dbProvider.Port())
 	exposedPorts := []nat.Port{tcpPort}
 	portBindings := nat.PortMap{
 		tcpPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: deployment.Port}},

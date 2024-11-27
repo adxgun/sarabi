@@ -30,8 +30,8 @@ func forbidden(w http.ResponseWriter, err error) {
 }
 
 func ok(w http.ResponseWriter, message string, data interface{}) {
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	r := response{
 		Error:   false,
 		Message: message,
@@ -42,8 +42,8 @@ func ok(w http.ResponseWriter, message string, data interface{}) {
 }
 
 func writeError(w http.ResponseWriter, errorCode int, err error) {
-	w.WriteHeader(errorCode)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(errorCode)
 	errmsg := ""
 	if err != nil {
 		errmsg = err.Error()

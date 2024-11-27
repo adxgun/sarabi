@@ -26,6 +26,10 @@ import (
 	"time"
 )
 
+const (
+	defaultBackupInterval = time.Minute * 1 // 30 mins
+)
+
 type (
 	Manager interface {
 		ValidateToken(ctx context.Context, token string) error
@@ -37,6 +41,8 @@ type (
 		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
 		AddCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.AddCredentialsResponse, error)
+		DownloadBackup(ctx context.Context, backupID uuid.UUID) (*types.File, error)
+		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 	}
 )
 
@@ -118,7 +124,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 			return nil, errors2.Wrap(err, "failed to run database component")
 		}
 
-		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, time.Minute*60*5); err != nil {
+		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval); err != nil {
 			return nil, errors2.Wrap(err, "failed to initialize auto-backup")
 		}
 
@@ -499,6 +505,14 @@ func (m *manager) AddCredentials(ctx context.Context, params types.AddCredential
 			Key:      item.Name,
 		}
 	}), nil
+}
+
+func (m *manager) DownloadBackup(ctx context.Context, backupID uuid.UUID) (*types.File, error) {
+	return m.backupService.Download(ctx, backupID)
+}
+
+func (m *manager) ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error) {
+	return m.backupService.ListBackups(ctx, applicationID)
 }
 
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {

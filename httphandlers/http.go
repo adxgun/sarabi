@@ -253,3 +253,38 @@ func (handler *ApiHandler) AddCredentials(w http.ResponseWriter, r *http.Request
 
 	ok(w, "credentials added", result)
 }
+
+func (handler *ApiHandler) DownloadBackup(w http.ResponseWriter, r *http.Request) {
+	backupID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	result, err := handler.mn.DownloadBackup(context.Background(), backupID)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	w.Header().Add("Content-Length", fmt.Sprintf("%d", result.Stat.Size))
+	w.Header().Add("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	w.Write(result.Content)
+}
+
+func (handler *ApiHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	result, err := handler.mn.ListBackups(context.Background(), applicationID)
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	ok(w, "success", result)
+}

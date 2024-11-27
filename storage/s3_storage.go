@@ -45,8 +45,26 @@ func (s s3Storage) Save(ctx context.Context, location string, file types.File) e
 	return nil
 }
 
-func (s s3Storage) Get(ctx context.Context, location string) (io.Reader, error) {
-	return s.client.GetObject(ctx, backupBucket, location, minio.GetObjectOptions{})
+func (s s3Storage) Get(ctx context.Context, location string) (*types.File, error) {
+	r, err := s.client.GetObject(ctx, backupBucket, location, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	stat, err := r.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.File{
+		Content: content,
+		Stat:    types.FileStat{Size: stat.Size, Name: stat.Key},
+	}, nil
 }
 
 func (s s3Storage) makeBucket(ctx context.Context) error {

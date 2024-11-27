@@ -34,8 +34,13 @@ func (f fileStorage) Save(ctx context.Context, location string, file types.File)
 	return nil
 }
 
-func (f fileStorage) Get(ctx context.Context, location string) (io.Reader, error) {
+func (f fileStorage) Get(ctx context.Context, location string) (*types.File, error) {
 	fi, err := os.Open(location)
+	if err != nil {
+		return nil, err
+	}
+
+	stat, err := os.Stat(location)
 	if err != nil {
 		return nil, err
 	}
@@ -45,5 +50,8 @@ func (f fileStorage) Get(ctx context.Context, location string) (io.Reader, error
 		return nil, err
 	}
 
-	return bytes.NewReader(content), nil
+	return &types.File{
+		Content: content,
+		Stat:    types.FileStat{Size: stat.Size(), Name: stat.Name()},
+	}, nil
 }
