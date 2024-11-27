@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+const (
+	CredentialProviderS3 = "s3"
+)
+
 type (
 	Secret struct {
 		ID            uuid.UUID `gorm:"primaryKey"`
@@ -26,18 +30,32 @@ type (
 		Deployment   Deployment `gorm:"foreignKey:DeploymentID"`
 		Secret       Secret     `gorm:"foreignKey:SecretID"`
 	}
+
+	Credential struct {
+		ID            uuid.UUID `gorm:"primaryKey"`
+		ApplicationID uuid.UUID `gorm:"not null"`
+		Provider      string    `json:"provider"`
+		Name          string
+		Value         string
+		CreatedAt     time.Time
+	}
+
+	AddCredentialsParams struct {
+		ApplicationID uuid.UUID `json:"application_id"`
+		Provider      string    `json:"provider"`
+		Values        []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		} `json:"values"`
+	}
+
+	AddCredentialsResponse struct {
+		ID       uuid.UUID `json:"id"`
+		Provider string    `json:"provider"`
+		Key      string    `json:"key"`
+	}
 )
 
 func (s *Secret) Env() string {
 	return fmt.Sprintf("%s=%s", s.Name, s.Value)
-}
-
-func DBSecrets(deployment *Deployment) []CreateSecretParams {
-	return []CreateSecretParams{
-		{Key: "POSTGRES_DB", Value: deployment.Application.Name, InstanceType: deployment.InstanceType, Environment: deployment.Environment, ApplicationID: deployment.ApplicationID},
-		{Key: "POSTGRES_PASSWORD", Value: uuid.New().String(), InstanceType: deployment.InstanceType, Environment: deployment.Environment, ApplicationID: deployment.ApplicationID},
-		{Key: "POSTGRES_USER", Value: deployment.Application.Name + "-user", InstanceType: deployment.InstanceType, Environment: deployment.Environment, ApplicationID: deployment.ApplicationID},
-		{Key: "DATABASE_HOST", Value: deployment.DBInstanceName(), InstanceType: deployment.InstanceType, Environment: deployment.Environment, ApplicationID: deployment.ApplicationID},
-		{Key: "DATABASE_PORT", Value: "5432", InstanceType: deployment.InstanceType, Environment: deployment.Environment, ApplicationID: deployment.ApplicationID},
-	}
 }

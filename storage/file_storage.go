@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sarabi/types"
 )
 
 type fileStorage struct {
@@ -15,7 +16,7 @@ func NewFileStorage() Storage {
 	return &fileStorage{}
 }
 
-func (f fileStorage) Save(ctx context.Context, location string, content io.Reader) error {
+func (f fileStorage) Save(ctx context.Context, location string, file types.File) error {
 	dir := filepath.Dir(location)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
@@ -26,7 +27,7 @@ func (f fileStorage) Save(ctx context.Context, location string, content io.Reade
 		return err
 	}
 
-	_, err = io.Copy(fi, content)
+	_, err = io.Copy(fi, bytes.NewReader(file.Content))
 	if err != nil {
 		return err
 	}

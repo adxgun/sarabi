@@ -34,7 +34,7 @@ type Docker interface {
 	CopyFileIntoContainer(ctx context.Context, containerName, src, dest string) error
 	ExtractFiles(ctx context.Context, containerName, fileDir string) error
 	ConnectContainer(ctx context.Context, containerName, networkName string) error
-	ContainerExec(ctx context.Context, params ContainerExecParams) (io.ReadCloser, error)
+	ContainerExec(ctx context.Context, params ContainerExecParams) (types.File, error)
 }
 
 type dockerClient struct {
@@ -311,7 +311,7 @@ func (d *dockerClient) ConnectContainer(ctx context.Context, containerName, netw
 	return d.hostClient.NetworkConnect(ctx, networkName, containerName, nil)
 }
 
-func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (io.ReadCloser, error) {
+func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (types.File, error) {
 	execID, err := d.hostClient.ContainerExecCreate(ctx, params.ContainerName, container.ExecOptions{
 		Env:          params.Envs,
 		Cmd:          params.Cmd,
@@ -320,31 +320,41 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 		Privileged:   true,
 	})
 	if err != nil {
-		return nil, err
+		return types.File{}, err
 	}
 
 	hr, err := d.hostClient.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{})
 	if err != nil {
-		return nil, err
+		return types.File{}, err
 	}
 
 	_, stdErr, err := readExecResponse(hr.Conn)
 	if err != nil {
-		return nil, err
+		return types.File{}, err
 	}
 	execResponse, err := d.hostClient.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {
-		return nil, err
+		return types.File{}, err
 	}
 	if execResponse.ExitCode != 0 {
-		return nil, fmt.Errorf("failed to run cmd: %s", stdErr)
+		return types.File{}, fmt.Errorf("failed to run cmd: %s", stdErr)
 	}
 
-	r, _, err := d.hostClient.CopyFromContainer(ctx, params.ContainerName, params.ResultPath)
+	r, stat, err := d.hostClient.CopyFromContainer(ctx, params.ContainerName, params.ResultPath)
 	if err != nil {
-		return nil, err
+		return types.File{}, err
 	}
-	return r, nil
+
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return types.File{}, err
+	}
+
+	defer r.Close()
+	return types.File{
+		Content: content,
+		Stat:    types.FileStat{Size: stat.Size, Name: stat.Name},
+	}, nil
 }
 
 func (d *dockerClient) wait(ctx context.Context, containerID string) {

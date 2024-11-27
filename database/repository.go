@@ -45,3 +45,10 @@ type BackupSettingsRepository interface {
 	FindAll(ctx context.Context) ([]*types.BackupSettings, error)
 	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.BackupSettings, error)
 }
+
+type CredentialRepository interface {
+	Save(ctx context.Context, cred *types.Credential) error
+	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Credential, error)
+	UpdateCredentialValue(ctx context.Context, id uuid.UUID, newValue string) error
+	FindByName(ctx context.Context, applicationID uuid.UUID, provider, key string) (*types.Credential, error)
+}

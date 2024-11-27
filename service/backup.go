@@ -28,7 +28,6 @@ type (
 		dockerClient             docker.Docker
 		applicationService       ApplicationService
 		secretService            SecretService
-		st                       storage.Storage
 		backupSettingsRepository database.BackupSettingsRepository
 		scheduler                gocron.Scheduler
 		started                  bool
@@ -36,7 +35,7 @@ type (
 )
 
 func NewBackupService(dc docker.Docker, service ApplicationService,
-	ss SecretService, st storage.Storage, backupSettings database.BackupSettingsRepository) (BackupService, error) {
+	ss SecretService, backupSettings database.BackupSettingsRepository) (BackupService, error) {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
 		return nil, err
@@ -45,7 +44,6 @@ func NewBackupService(dc docker.Docker, service ApplicationService,
 		dockerClient:             dc,
 		applicationService:       service,
 		secretService:            ss,
-		st:                       st,
 		backupSettingsRepository: backupSettings,
 		scheduler:                scheduler,
 	}, nil
@@ -140,6 +138,11 @@ func (b backupService) postgresBackup(ctx context.Context, application *types.Ap
 		return err
 	}
 
+	st, err := b.storage(ctx, application)
+	if err != nil {
+		return err
+	}
+
 	resultPath := fmt.Sprintf("tmp/%s.sql", uuid.NewString())
 	cmd := strslice.StrSlice{
 		"pg_dump",
@@ -163,8 +166,7 @@ func (b backupService) postgresBackup(ctx context.Context, application *types.Ap
 		return errors2.Wrap(err, "failed to execute pg_dump")
 	}
 
-	defer r.Close()
-	return b.st.Save(ctx, location, r)
+	return st.Save(ctx, location, r)
 }
 
 func (b backupService) CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, duration time.Duration) error {
@@ -193,4 +195,46 @@ func (b backupService) CreateBackupSettings(ctx context.Context, applicationID u
 	}
 
 	return b.runScheduler(ctx, backupSettings)
+}
+
+func (b backupService) findStorageCredential(ctx context.Context, application *types.Application) (*types.StorageCredentials, error) {
+	credentials, err := b.secretService.FindApplicationCredentials(ctx, application.ID, types.CredentialProviderS3)
+	if err != nil {
+		return nil, err
+	}
+
+	keyId, err := FindCredential("ACCESS_KEY", credentials)
+	if err != nil {
+		return nil, err
+	}
+	secretAccessKey, err := FindCredential("SECRET_KEY", credentials)
+	if err != nil {
+		return nil, err
+	}
+	endpoint, err := FindCredential("ENDPOINT", credentials)
+	if err != nil {
+		return nil, err
+	}
+	region, _ := FindCredential("REGION", credentials)
+	regionStr := ""
+	if region != nil {
+		regionStr = region.Value
+	}
+
+	return &types.StorageCredentials{
+		Endpoint:  endpoint.Value,
+		KeyId:     keyId.Value,
+		SecretKey: secretAccessKey.Value,
+		Region:    regionStr,
+	}, nil
+}
+
+func (b backupService) storage(ctx context.Context, application *types.Application) (storage.Storage, error) {
+	cred, err := b.findStorageCredential(ctx, application)
+	if err != nil {
+		logger.Info("cannot find S3-compatible credentials, fallback to file storage backup",
+			zap.Error(err))
+		return storage.NewFileStorage(), nil
+	}
+	return storage.NewS3Storage(*cred)
 }

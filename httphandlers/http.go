@@ -237,3 +237,19 @@ func (handler *ApiHandler) RemoveDomain(w http.ResponseWriter, r *http.Request) 
 
 	ok(w, "domain removed", nil)
 }
+
+func (handler *ApiHandler) AddCredentials(w http.ResponseWriter, r *http.Request) {
+	params := types.AddCredentialsParams{}
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	result, err := handler.mn.AddCredentials(context.Background(), params)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "credentials added", result)
+}

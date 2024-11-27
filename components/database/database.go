@@ -3,6 +3,7 @@ package databasecomponent
 import (
 	"context"
 	"fmt"
+	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	"sarabi/components"
 	proxycomponent "sarabi/components/proxy"
@@ -82,12 +83,19 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), d.dbProvider.DataPath()),
 		storage.BackupTempDir + ":" + storage.BackupTempDir,
 	}
+	tcpPort, _ := nat.NewPort("tcp", deployment.Port)
+	exposedPorts := []nat.Port{tcpPort}
+	portBindings := nat.PortMap{
+		tcpPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: deployment.Port}},
+	}
 	params := docker.StartContainerParams{
 		Image:        d.dbProvider.Image(),
 		Container:    d.dbProvider.ContainerName(deployment),
 		Network:      deployment.NetworkName(),
 		Volumes:      volumeMounts,
 		Environments: envs,
+		ExposedPorts: exposedPorts,
+		PortBindings: portBindings,
 	}
 	startResp, err := d.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {

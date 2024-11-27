@@ -85,14 +85,19 @@ func setup() (*http.Server, error, func() error) {
 	secretRepo := database.NewSecretRepository(db)
 	domainRepo := database.NewDomainRepository(db)
 	backupSettingsRepo := database.NewBackupSettingsRepository(db)
+	credentialRepo := database.NewCredentialRepository(db)
 
 	encryptor := sarabi.NewEncryptor()
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
-	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo)
+	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
 	caddyClient := caddy.NewCaddyClient()
 	domainService := service.NewDomainService(caddyClient, domainRepo)
 
-	backupSvc := service.NewBackupService(docker, appService, secretService, storage.NewFileStorage(), backupSettingsRepo)
+	backupSvc, err := service.NewBackupService(docker, appService, secretService, backupSettingsRepo)
+	if err != nil {
+		return nil, err, nil
+	}
+
 	if err := backupSvc.Run(context.Background()); err != nil {
 		return nil, err, nil
 	}

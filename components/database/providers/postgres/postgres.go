@@ -37,7 +37,7 @@ func (p postgresProvider) EnvVars(dep *types.Deployment) []types.CreateSecretPar
 		{Key: "POSTGRES_DB", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 		{Key: "POSTGRES_USER", Value: fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 		{Key: "POSTGRES_HOST", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_PORT", Value: "5432", Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_PORT", Value: dep.Port, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 		{Key: "POSTGRES_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 	}
 }

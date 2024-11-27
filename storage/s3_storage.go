@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -32,12 +33,12 @@ func NewS3Storage(cred types.StorageCredentials) (Storage, error) {
 	}, nil
 }
 
-func (s s3Storage) Save(ctx context.Context, location string, content io.Reader) error {
+func (s s3Storage) Save(ctx context.Context, location string, file types.File) error {
 	if err := s.makeBucket(ctx); err != nil {
 		return err
 	}
 
-	_, err := s.client.PutObject(ctx, backupBucket, location, content, 0, minio.PutObjectOptions{})
+	_, err := s.client.PutObject(ctx, backupBucket, location, bytes.NewReader(file.Content), file.Stat.Size, minio.PutObjectOptions{})
 	if err != nil {
 		return err
 	}

@@ -36,6 +36,7 @@ type (
 		Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error)
 		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
+		AddCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.AddCredentialsResponse, error)
 	}
 )
 
@@ -117,7 +118,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 			return nil, errors2.Wrap(err, "failed to run database component")
 		}
 
-		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, time.Minute*1); err != nil {
+		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, time.Minute*60*5); err != nil {
 			return nil, errors2.Wrap(err, "failed to initialize auto-backup")
 		}
 
@@ -143,7 +144,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 			return nil, errors2.Wrap(err, "failed to save backend artifact")
 		}
 
-		if err := m.setupAppSecrets(ctx, backendDeployment); err != nil {
+		if err := m.setupAppVariables(ctx, backendDeployment); err != nil {
 			return nil, errors2.Wrap(err, "failed to setup app variables")
 		}
 
@@ -485,6 +486,21 @@ func (m *manager) RemoveDomain(ctx context.Context, applicationID uuid.UUID, nam
 	return nil
 }
 
+func (m *manager) AddCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.AddCredentialsResponse, error) {
+	result, err := m.secretService.CreateCredentials(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return lo.Map(result, func(item *types.Credential, index int) *types.AddCredentialsResponse {
+		return &types.AddCredentialsResponse{
+			ID:       item.ID,
+			Provider: item.Provider,
+			Key:      item.Name,
+		}
+	}), nil
+}
+
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {
 	var mergedSecrets = append([]types.CreateSecretParams{}, newVars...)
 	for _, nextOldVar := range oldVars {
@@ -508,7 +524,7 @@ func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSe
 	return mergedSecrets
 }
 
-func (m *manager) setupAppSecrets(ctx context.Context, deployment *types.Deployment) error {
+func (m *manager) setupAppVariables(ctx context.Context, deployment *types.Deployment) error {
 	secret, err := m.secretService.Create(ctx, types.CreateSecretParams{
 		Key:           "PORT",
 		Value:         deployment.Port,
@@ -525,14 +541,18 @@ func (m *manager) setupAppSecrets(ctx context.Context, deployment *types.Deploym
 		return err
 	}
 
-	dbSecrets := make([]*types.Secret, 0)
-	for _, ss := range appSecrets {
-		if types.InstanceType(ss.InstanceType) == types.InstanceTypeDatabase &&
-			ss.Environment == deployment.Environment {
-			dbSecrets = append(dbSecrets, ss)
+	deploymentSecrets := lo.Filter(appSecrets, func(item *types.Secret, index int) bool {
+		return item.Environment == deployment.Environment
+	})
+	deploymentSecrets = append(deploymentSecrets, secret)
+	vars := lo.Map(deploymentSecrets, func(item *types.Secret, index int) []string {
+		return []string{
+			item.Name,
+			item.Value,
+			item.Environment,
 		}
-	}
+	})
 
-	dbSecrets = append(dbSecrets, secret)
-	return m.secretService.CreateDeploymentSecrets(ctx, deployment.ID, dbSecrets)
+	logger.Info("env vars", zap.Any("envs", vars))
+	return m.secretService.CreateDeploymentSecrets(ctx, deployment.ID, deploymentSecrets)
 }

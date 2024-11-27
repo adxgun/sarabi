@@ -15,10 +15,10 @@ func Routes(h *ApiHandler) chi.Router {
 		rr.Patch("/applications/{application_id}/scale", h.Scale)
 		rr.Post("/applications/{application_id}/domains", h.AddDomain)
 		rr.Delete("/applications/{application_id}/domains", h.RemoveDomain)
+		rr.Post("/applications/add-credentials", h.AddCredentials)
 
 		rr.Get("/h", func(writer http.ResponseWriter, request *http.Request) {
-			writer.WriteHeader(http.StatusOK)
-			writer.Write([]byte("Hoi, we're HTTPs live!"))
+			ok(writer, "Hoi, we're HTTPs live!", struct{}{})
 		})
 	})
 	return r

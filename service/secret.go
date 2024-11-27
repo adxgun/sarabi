@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
+	"go.uber.org/zap"
 	"sarabi"
 	"sarabi/database"
+	"sarabi/logger"
 	"sarabi/types"
+	"time"
 )
 
 type SecretService interface {
@@ -15,19 +19,24 @@ type SecretService interface {
 	FindAll(ctx context.Context, applicationID uuid.UUID) ([]*types.Secret, error)
 	CreateDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID, secrets []*types.Secret) error
 	FindDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) ([]*types.Secret, error)
+	CreateCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.Credential, error)
+	FindApplicationCredentials(ctx context.Context, applicationID uuid.UUID, provider string) ([]*types.Credential, error)
 }
 
 type secretService struct {
 	encryptor                  sarabi.Encryptor
 	repository                 database.SecretRepository
 	deploymentSecretRepository database.DeploymentSecretRepository
+	credentialRepository       database.CredentialRepository
 }
 
-func NewSecretService(enc sarabi.Encryptor, repo database.SecretRepository, depSecretRepo database.DeploymentSecretRepository) SecretService {
+func NewSecretService(enc sarabi.Encryptor, repo database.SecretRepository,
+	depSecretRepo database.DeploymentSecretRepository, credentialRepo database.CredentialRepository) SecretService {
 	return &secretService{
 		encryptor:                  enc,
 		repository:                 repo,
 		deploymentSecretRepository: depSecretRepo,
+		credentialRepository:       credentialRepo,
 	}
 }
 
@@ -126,6 +135,62 @@ func (s *secretService) FindDeploymentSecrets(ctx context.Context, deploymentID 
 	return secrets, nil
 }
 
+func (s *secretService) CreateCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.Credential, error) {
+	result := make([]*types.Credential, 0)
+	for _, v := range params.Values {
+		credValue, err := s.encryptor.Encrypt(v.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		cred, err := s.credentialRepository.FindByName(ctx, params.ApplicationID, params.Provider, v.Key)
+		if err == nil && cred.ID != uuid.Nil {
+			logger.Info("updating credential values",
+				zap.Any("cred", cred),
+				zap.String("value", credValue))
+			if err := s.credentialRepository.UpdateCredentialValue(ctx, cred.ID, credValue); err != nil {
+				return nil, err
+			}
+		} else {
+			cred = &types.Credential{
+				ID:            uuid.New(),
+				ApplicationID: params.ApplicationID,
+				Provider:      params.Provider,
+				Name:          v.Key,
+				Value:         credValue,
+				CreatedAt:     time.Now(),
+			}
+			if err := s.credentialRepository.Save(ctx, cred); err != nil {
+				return nil, err
+			}
+		}
+		result = append(result, cred)
+	}
+	return result, nil
+}
+
+func (s *secretService) FindApplicationCredentials(ctx context.Context, applicationID uuid.UUID, provider string) ([]*types.Credential, error) {
+	all, err := s.credentialRepository.FindByApplicationID(ctx, applicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	credsByProvider := lo.Filter(all, func(item *types.Credential, index int) bool {
+		return item.Provider == provider
+	})
+
+	result := make([]*types.Credential, 0, len(credsByProvider))
+	for _, next := range credsByProvider {
+		decryptedValue, err := s.encryptor.Decrypt(next.Value)
+		if err != nil {
+			return nil, err
+		}
+		next.Value = decryptedValue
+		result = append(result, next)
+	}
+	return result, nil
+}
+
 func FindSecret(name string, secrets []*types.Secret) (*types.Secret, error) {
 	for _, next := range secrets {
 		if next.Name == name {
@@ -133,4 +198,13 @@ func FindSecret(name string, secrets []*types.Secret) (*types.Secret, error) {
 		}
 	}
 	return nil, fmt.Errorf("secret: %s was not found", name)
+}
+
+func FindCredential(name string, creds []*types.Credential) (*types.Credential, error) {
+	for _, next := range creds {
+		if next.Name == name {
+			return next, nil
+		}
+	}
+	return nil, fmt.Errorf("credential: %s was not found", name)
 }
