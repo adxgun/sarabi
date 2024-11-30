@@ -34,7 +34,8 @@ type Docker interface {
 	CopyFileIntoContainer(ctx context.Context, containerName, src, dest string) error
 	ExtractFiles(ctx context.Context, containerName, fileDir string) error
 	ConnectContainer(ctx context.Context, containerName, networkName string) error
-	ContainerExec(ctx context.Context, params ContainerExecParams) (types.File, error)
+	ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error)
+	CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error)
 }
 
 type dockerClient struct {
@@ -311,7 +312,7 @@ func (d *dockerClient) ConnectContainer(ctx context.Context, containerName, netw
 	return d.hostClient.NetworkConnect(ctx, networkName, containerName, nil)
 }
 
-func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (types.File, error) {
+func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error) {
 	execID, err := d.hostClient.ContainerExecCreate(ctx, params.ContainerName, container.ExecOptions{
 		Env:          params.Envs,
 		Cmd:          params.Cmd,
@@ -320,39 +321,38 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 		Privileged:   true,
 	})
 	if err != nil {
-		return types.File{}, err
+		return nil, err
 	}
 
 	hr, err := d.hostClient.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{})
 	if err != nil {
-		return types.File{}, err
+		return nil, err
 	}
 
-	_, stdErr, err := readExecResponse(hr.Conn)
-	if err != nil {
-		return types.File{}, err
-	}
 	execResponse, err := d.hostClient.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {
-		return types.File{}, err
+		return nil, err
 	}
-	if execResponse.ExitCode != 0 {
-		return types.File{}, fmt.Errorf("failed to run cmd: %s", stdErr)
+	if execResponse.ExitCode == 0 {
+		return hr.Reader, nil
 	}
 
-	r, stat, err := d.hostClient.CopyFromContainer(ctx, params.ContainerName, params.ResultPath)
+	_, stdErr, err := ReadExecResponse(hr.Conn)
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, fmt.Errorf("exec cmd error: %s", stdErr)
+}
+
+func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error) {
+	r, stat, err := d.hostClient.CopyFromContainer(ctx, containerName, filePath)
 	if err != nil {
 		return types.File{}, err
 	}
 
-	content, err := io.ReadAll(r)
-	if err != nil {
-		return types.File{}, err
-	}
-
-	defer r.Close()
 	return types.File{
-		Content: content,
+		Content: r,
 		Stat:    types.FileStat{Size: stat.Size, Name: stat.Name},
 	}, nil
 }

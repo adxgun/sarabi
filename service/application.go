@@ -12,6 +12,7 @@ import (
 type (
 	ApplicationService interface {
 		Create(ctx context.Context, params types.CreateApplicationParams) (*types.Application, error)
+		List(ctx context.Context) ([]*types.Application, error)
 		Get(ctx context.Context, applicationID uuid.UUID) (*types.Application, error)
 		GetDeployment(ctx context.Context, deploymentID uuid.UUID) (*types.Deployment, error)
 		CreateDeployments(ctx context.Context, params []types.CreateDeploymentParams) ([]*types.Deployment, error)
@@ -19,6 +20,7 @@ type (
 		FindCurrentlyActiveDeployments(ctx context.Context, applicationID uuid.UUID, instanceType types.InstanceType) ([]*types.Deployment, error)
 		FindCurrentlyActiveDeploymentsEnv(ctx context.Context, applicationID uuid.UUID, instanceType types.InstanceType, environment string) (*types.Deployment, error)
 		FindDeploymentsByIdentifier(ctx context.Context, identifier string) ([]*types.Deployment, error)
+		FindDeploymentsByApplication(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error)
 		UpdateDeploymentStatus(ctx context.Context, deploymentID uuid.UUID, status types.DeploymentStatus) error
 	}
 )
@@ -50,6 +52,10 @@ func (a *applicationService) Create(ctx context.Context, params types.CreateAppl
 	}
 
 	return app, nil
+}
+
+func (a *applicationService) List(ctx context.Context) ([]*types.Application, error) {
+	return a.applicationRepository.FindAll(ctx)
 }
 
 func (a *applicationService) Get(ctx context.Context, applicationID uuid.UUID) (*types.Application, error) {
@@ -122,4 +128,8 @@ func (a *applicationService) CreateDeployment(ctx context.Context, param types.C
 
 func (a *applicationService) FindDeploymentsByIdentifier(ctx context.Context, identifier string) ([]*types.Deployment, error) {
 	return a.deploymentRepository.FindByIdentifier(ctx, identifier)
+}
+
+func (a *applicationService) FindDeploymentsByApplication(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error) {
+	return a.deploymentRepository.FindAll(ctx, applicationID)
 }

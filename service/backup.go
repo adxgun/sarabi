@@ -21,7 +21,7 @@ import (
 type (
 	BackupService interface {
 		Run(ctx context.Context) error
-		CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, duration time.Duration) error
+		CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, runInterval time.Duration) error
 		Download(ctx context.Context, backupID uuid.UUID) (*types.File, error)
 		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 	}
@@ -91,19 +91,21 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 	}
 
 	for _, se := range application.StorageEngines {
-		var result backup.ExecuteResponse
-		var backuperr error
+		var bk backup.Executor
 		switch se {
 		case types.StorageEnginePostgres:
-			bk := backup.NewPostgres(b.dockerClient)
-			result, backuperr = bk.Execute(ctx, param)
+			bk = backup.NewPostgres(b.dockerClient)
+		case types.StorageEngineMysql:
+			bk = backup.NewMysql(b.dockerClient)
+		case types.StorageEngineMongo:
+			bk = backup.NewMongo(b.dockerClient)
 		default:
 			return nil
 		}
-
-		if backuperr != nil {
+		result, err := bk.Execute(ctx, param)
+		if err != nil {
 			logger.Error("backup returned error",
-				zap.Error(backuperr),
+				zap.Error(err),
 				zap.Any("storage_engine", se))
 		} else {
 			logger.Info("backup completed",
@@ -150,7 +152,7 @@ func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSetting
 	return nil
 }
 
-func (b backupService) CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, duration time.Duration) error {
+func (b backupService) CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, runInterval time.Duration) error {
 	settings, err := b.backupSettingsRepository.FindByApplicationID(ctx, applicationID)
 	if err != nil {
 		return errors2.Wrap(err, "failed to fetch backup settings")
@@ -167,7 +169,7 @@ func (b backupService) CreateBackupSettings(ctx context.Context, applicationID u
 		ID:             uuid.New(),
 		ApplicationID:  applicationID,
 		Environment:    environment,
-		BackupInterval: duration,
+		BackupInterval: runInterval,
 		CreatedAt:      time.Now(),
 	}
 	err = b.backupSettingsRepository.Save(ctx, backupSettings)

@@ -35,6 +35,7 @@ type (
 		ValidateToken(ctx context.Context, token string) error
 		CreateApplication(ctx context.Context, param types.CreateApplicationParams) (*types.Application, error)
 		Deploy(ctx context.Context, param *types.DeployParams) ([]*types.Deployment, error)
+		Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
 		Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error)
@@ -43,6 +44,9 @@ type (
 		AddCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.AddCredentialsResponse, error)
 		DownloadBackup(ctx context.Context, backupID uuid.UUID) (*types.File, error)
 		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
+		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error)
+		ListApplications(ctx context.Context) ([]*types.Application, error)
+		EnableDatabaseAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string) error
 	}
 )
 
@@ -118,6 +122,8 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 			return nil, errors2.Wrap(err, "failed to create database deployment")
 		}
 
+		// TODO: get storage engine from application instead of deployment
+		// TODO: and run db component for each storage engine
 		dbComponent := databasecomponent.New(m.dockerClient, m.appService,
 			m.secretService, databasecomponent.NewProvider(param.StorageEngine), m.caddyClient)
 		if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
@@ -513,6 +519,22 @@ func (m *manager) DownloadBackup(ctx context.Context, backupID uuid.UUID) (*type
 
 func (m *manager) ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error) {
 	return m.backupService.ListBackups(ctx, applicationID)
+}
+
+func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error {
+	return nil
+}
+
+func (m *manager) ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error) {
+	return m.appService.FindDeploymentsByApplication(ctx, applicationID)
+}
+
+func (m *manager) ListApplications(ctx context.Context) ([]*types.Application, error) {
+	return m.appService.List(ctx)
+}
+
+func (m *manager) EnableDatabaseAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string) error {
+	return nil
 }
 
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {

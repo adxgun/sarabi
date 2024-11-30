@@ -18,4 +18,13 @@ type (
 		InstanceType InstanceType `json:"instance_type"`
 		Environment  string       `json:"environment"`
 	}
+
+	DeployResponse struct {
+		ID         uuid.UUID `json:"id"`
+		Identifier string    `json:"identifier"`
+		AccessURL  struct {
+			Frontend []string `json:"frontend"`
+			Backend  []string `json:"backend"`
+		} `json:"access_url"`
+	}
 )

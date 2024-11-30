@@ -1,7 +1,9 @@
 package types
 
+import "io"
+
 type File struct {
-	Content []byte
+	Content io.Reader
 	Stat    FileStat
 }
 

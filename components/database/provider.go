@@ -1,9 +1,11 @@
 package databasecomponent
 
 import (
+	"go.uber.org/zap"
 	"sarabi/components/database/providers/mongo"
 	"sarabi/components/database/providers/mysql"
 	"sarabi/components/database/providers/postgres"
+	"sarabi/logger"
 	"sarabi/types"
 )
 
@@ -24,6 +26,8 @@ type (
 )
 
 func NewProvider(engine types.StorageEngine) Provider {
+	logger.Info("getting provider for engine",
+		zap.Any("engine", engine))
 	switch engine {
 	case types.StorageEnginePostgres:
 		return postgres.New()

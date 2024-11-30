@@ -44,7 +44,6 @@ type StartContainerParams struct {
 
 type ContainerExecParams struct {
 	ContainerName string
-	ResultPath    string
 	Cmd           strslice.StrSlice
 	Envs          []string
 }
@@ -69,7 +68,7 @@ func readRemoteResponse(body io.Reader) ([]RemoteResponse, error) {
 	return resp, nil
 }
 
-func readExecResponse(reader io.Reader) (string, string, error) {
+func ReadExecResponse(reader io.Reader) (string, string, error) {
 	var stdOut, stdErr bytes.Buffer
 	_, err := stdcopy.StdCopy(&stdOut, &stdErr, reader)
 	if err != nil {

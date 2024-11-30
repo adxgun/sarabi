@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"sarabi/components"
 	proxycomponent "sarabi/components/proxy"
 	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
+	"sarabi/logger"
 	"sarabi/service"
 	"sarabi/storage"
 	"sarabi/types"
@@ -38,6 +40,8 @@ func (d *databaseComponent) Name() string {
 }
 
 func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
+	logger.Info("running application component: database",
+		zap.String("dockerImage", d.dbProvider.Image()))
 	deployment, err := d.appService.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return nil, err

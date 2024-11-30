@@ -69,9 +69,9 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 	}
 
 	location := fmt.Sprintf("%s/%s-%s/postgres-%s.sql", storage.BackupDir, params.Application.Name, params.Environment, time.Now().Format("2006_01_02_03_04pm"))
-	r, err := p.dockerClient.ContainerExec(ctx, docker.ContainerExecParams{
-		ContainerName: fmt.Sprintf("postgres-%s-%s", params.Application.Name, params.Environment),
-		ResultPath:    resultPath,
+	containerName := fmt.Sprintf("postgres-%s-%s", params.Application.Name, params.Environment)
+	_, err = p.dockerClient.ContainerExec(ctx, docker.ContainerExecParams{
+		ContainerName: containerName,
 		Cmd:           cmd,
 		Envs:          envs,
 	})
@@ -79,7 +79,12 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 		return ExecuteResponse{}, errors.Wrap(err, "failed to execute pg_dump")
 	}
 
-	if err := st.Save(ctx, location, r); err != nil {
+	dmpFile, err := p.dockerClient.CopyFromContainer(ctx, containerName, resultPath)
+	if err != nil {
+		return ExecuteResponse{}, errors.Wrap(err, "failed to copy dump file")
+	}
+
+	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
 	}
 

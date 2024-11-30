@@ -1,11 +1,9 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"io"
 	"sarabi/types"
 )
 
@@ -38,7 +36,8 @@ func (s s3Storage) Save(ctx context.Context, location string, file types.File) e
 		return err
 	}
 
-	_, err := s.client.PutObject(ctx, backupBucket, location, bytes.NewReader(file.Content), file.Stat.Size, minio.PutObjectOptions{})
+	// TODO: implement chunk writer
+	_, err := s.client.PutObject(ctx, backupBucket, location, file.Content, file.Stat.Size, minio.PutObjectOptions{})
 	if err != nil {
 		return err
 	}
@@ -56,13 +55,8 @@ func (s s3Storage) Get(ctx context.Context, location string) (*types.File, error
 		return nil, err
 	}
 
-	content, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-
 	return &types.File{
-		Content: content,
+		Content: r,
 		Stat:    types.FileStat{Size: stat.Size, Name: stat.Key},
 	}, nil
 }

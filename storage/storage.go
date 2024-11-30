@@ -17,4 +17,6 @@ type (
 const (
 	TypeFS Type = "File"
 	TypeS3 Type = "S3"
+
+	bufferSize int = 4 * 1024 * 1024 // 4MB
 )

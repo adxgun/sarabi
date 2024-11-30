@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"io"
 	"net/http"
 	"sarabi/logger"
 	"sarabi/manager"
@@ -269,8 +270,27 @@ func (handler *ApiHandler) DownloadBackup(w http.ResponseWriter, r *http.Request
 
 	w.Header().Add("Content-Length", fmt.Sprintf("%d", result.Stat.Size))
 	w.Header().Add("Content-Type", "application/octet-stream")
+	w.Header().Add("Content-Disposition", fmt.Sprintf("attachment; filename=%s", result.Stat.Name))
 	w.WriteHeader(http.StatusOK)
-	w.Write(result.Content)
+	buf := make([]byte, 10*1024*1024) // 10MB
+	for {
+		n, err := result.Content.Read(buf)
+		if err != nil && err != io.EOF {
+			serverError(w, err)
+			break
+		}
+
+		if n > 0 {
+			if _, err = w.Write(buf[:n]); err != nil {
+				serverError(w, err)
+				break
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+	}
 }
 
 func (handler *ApiHandler) ListBackups(w http.ResponseWriter, r *http.Request) {

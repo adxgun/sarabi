@@ -18,26 +18,26 @@ var (
 
 type (
 	Application struct {
-		ID             uuid.UUID `gorm:"primaryKey"`
-		Name           string
-		Domain         string
-		StorageEngines StorageEngines
+		ID             uuid.UUID      `gorm:"primaryKey"`
+		Name           string         `json:"name"`
+		Domain         string         `json:"domain"`
+		StorageEngines StorageEngines `json:"storage_engines"`
 		CreatedAt      time.Time
-		UpdatedAt      time.Time
-		DeletedAt      gorm.DeletedAt `gorm:"index"`
+		UpdatedAt      time.Time      `json:"-"`
+		DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 	}
 
 	Deployment struct {
-		ID            uuid.UUID `gorm:"primaryKey"`
-		ApplicationID uuid.UUID `gorm:"not null"`
-		Environment   string
-		Status        string
-		Instances     int
-		Port          string
-		InstanceType  InstanceType // frontend, backend, database, proxy
-		Identifier    string
-		Application   Application `gorm:"foreignKey:ApplicationID"`
-		CreatedAt     time.Time
+		ID            uuid.UUID    `gorm:"primaryKey" json:"id"`
+		ApplicationID uuid.UUID    `gorm:"not null" json:"applicationID"`
+		Environment   string       `json:"environment"`
+		Status        string       `json:"status"`
+		Instances     int          `json:"instances"`
+		Port          string       `json:"port"`
+		InstanceType  InstanceType `json:"instance_type"` // frontend, backend, database, proxy
+		Identifier    string       `json:"identifier"`
+		Application   Application  `gorm:"foreignKey:ApplicationID" json:"-"`
+		CreatedAt     time.Time    `json:"created_at"`
 	}
 
 	DeploymentStatus string

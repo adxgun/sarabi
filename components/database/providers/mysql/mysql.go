@@ -33,6 +33,7 @@ func (p mysqlProvider) EnvVars(dep *types.Deployment) []types.CreateSecretParams
 		{Key: "MYSQL_HOST", Value: fmt.Sprintf("mysql-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 		{Key: "MYSQL_PORT", Value: "3306", Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 		{Key: "MYSQL_ROOT_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 	}
 }
 

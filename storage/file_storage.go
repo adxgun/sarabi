@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"io"
 	"os"
@@ -27,8 +27,25 @@ func (f fileStorage) Save(ctx context.Context, location string, file types.File)
 		return err
 	}
 
-	_, err = io.Copy(fi, bytes.NewReader(file.Content))
-	if err != nil {
+	writer := bufio.NewWriter(fi)
+	buffer := make([]byte, bufferSize)
+	for {
+		n, err := file.Content.Read(buffer)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		if n > 0 {
+			_, err = writer.Write(buffer[:n])
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
 		return err
 	}
 	return nil
@@ -45,13 +62,8 @@ func (f fileStorage) Get(ctx context.Context, location string) (*types.File, err
 		return nil, err
 	}
 
-	content, err := io.ReadAll(fi)
-	if err != nil {
-		return nil, err
-	}
-
 	return &types.File{
-		Content: content,
+		Content: fi,
 		Stat:    types.FileStat{Size: stat.Size(), Name: stat.Name()},
 	}, nil
 }
