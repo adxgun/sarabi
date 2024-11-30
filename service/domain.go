@@ -15,6 +15,7 @@ type (
 	DomainService interface {
 		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types.Domain, error)
+		FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error)
 	}
 
 	domainService struct {
@@ -67,4 +68,8 @@ func (d *domainService) RemoveDomain(ctx context.Context, applicationID uuid.UUI
 	}
 
 	return domain, d.domainRepository.Delete(ctx, domain.ID)
+}
+
+func (d *domainService) FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error) {
+	return d.domainRepository.FindByApplicationID(ctx, applicationID)
 }

@@ -20,11 +20,12 @@ type (
 	}
 
 	DeployResponse struct {
-		ID         uuid.UUID `json:"id"`
 		Identifier string    `json:"identifier"`
-		AccessURL  struct {
-			Frontend []string `json:"frontend"`
-			Backend  []string `json:"backend"`
-		} `json:"access_url"`
+		AccessURL  AccessURL `json:"access_url"`
+	}
+
+	AccessURL struct {
+		Frontend []string `json:"frontend"`
+		Backend  []string `json:"backend"`
 	}
 )

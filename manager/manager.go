@@ -34,7 +34,7 @@ type (
 	Manager interface {
 		ValidateToken(ctx context.Context, token string) error
 		CreateApplication(ctx context.Context, param types.CreateApplicationParams) (*types.Application, error)
-		Deploy(ctx context.Context, param *types.DeployParams) ([]*types.Deployment, error)
+		Deploy(ctx context.Context, param *types.DeployParams) (*types.DeployResponse, error)
 		Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
 		Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error)
@@ -96,10 +96,13 @@ func (m *manager) CreateApplication(ctx context.Context, param types.CreateAppli
 	return m.appService.Create(ctx, param)
 }
 
-func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*types.Deployment, error) {
+func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types.DeployResponse, error) {
 	var backendDeployment *types.Deployment
 	var frontendDeployment *types.Deployment
 	var deployments = make([]*types.Deployment, 0)
+	var feDomains []string
+	var beDomains []string
+
 	identifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
 	if err != nil {
 		return nil, err
@@ -192,6 +195,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		if err := backend.Cleanup(ctx, result); err != nil {
 			logger.Warn("cleanup failed: ", zap.Error(err))
 		}
+		beDomains = append(beDomains, backendDeployment.AccessURL(types.InstanceTypeBackend))
 	}
 
 	if frontendDeployment != nil {
@@ -203,8 +207,30 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) ([]*typ
 		if err := frontend.Cleanup(ctx, result); err != nil {
 			logger.Warn("cleanup failed: ", zap.Error(err))
 		}
+		feDomains = append(feDomains, frontendDeployment.AccessURL(types.InstanceTypeBackend))
 	}
-	return deployments, nil
+
+	domains, err := m.domainService.FindByApplicationID(ctx, param.ApplicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, do := range domains {
+		if do.InstanceType == types.InstanceTypeFrontend && do.Environment == param.Environment {
+			feDomains = append(feDomains, do.Name)
+		}
+		if do.InstanceType == types.InstanceTypeBackend && do.Environment == param.Environment {
+			beDomains = append(beDomains, do.Name)
+		}
+	}
+
+	return &types.DeployResponse{
+		Identifier: identifier,
+		AccessURL: types.AccessURL{
+			Frontend: feDomains,
+			Backend:  beDomains,
+		},
+	}, nil
 }
 
 func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {

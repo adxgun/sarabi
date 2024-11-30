@@ -62,7 +62,6 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		StorageEngine string    `json:"storage_engine"`
 	}
 
-	logger.Info("api body", zap.String("value", r.FormValue("json")))
 	if err := json.Unmarshal([]byte(r.FormValue("json")), &body); err != nil {
 		badRequest(w, errors.Wrap(err, "invalid request body"))
 		return
@@ -102,7 +101,8 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logger.Info("starting deployment", zap.Any("params", param.ApplicationID))
+	logger.Info("starting deployment",
+		zap.Any("application_id", param.ApplicationID))
 	resp, err := handler.mn.Deploy(context.Background(), param)
 	if err != nil {
 		serverError(w, errors.Wrap(err, "deployment failed"))

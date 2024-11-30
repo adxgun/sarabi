@@ -54,3 +54,12 @@ func (d *domainRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		Where("id = ?", id).
 		Delete(&types.Domain{}).Error
 }
+
+func (d *domainRepository) FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error) {
+	result := make([]*types.Domain, 0)
+	err := d.db.
+		WithContext(ctx).
+		Where("application_id = ?", applicationID).
+		Find(&result).Error
+	return result, err
+}

@@ -38,6 +38,7 @@ type DomainRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*types.Domain, error)
 	Find(ctx context.Context, name string) (*types.Domain, error)
 	Delete(ctx context.Context, id uuid.UUID) error
+	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error)
 }
 
 type BackupSettingsRepository interface {
