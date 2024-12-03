@@ -14,16 +14,7 @@ var (
 	mainAccessListenPort = []string{":80", ":443"}
 	caddyAdminAccessPort = ":2019"
 	mainServer           = "main"
-	dbProxies            = []dbProxy{
-		{name: "postgresql_proxy", listen: ":5432"},
-		{name: "mysql_proxy", listen: ":3306"},
-	}
 )
-
-type dbProxy struct {
-	name   string
-	listen string
-}
 
 type Client interface {
 	Init(ctx context.Context, caddyUrl string) error
@@ -41,14 +32,6 @@ func NewCaddyClient() Client {
 }
 
 func (c *caddyClient) Init(ctx context.Context, caddyUrl string) error {
-	layer4Servers := make(map[string]*Layer4Server)
-	for _, p := range dbProxies {
-		layer4Servers[p.name] = &Layer4Server{
-			Listen: []string{p.listen},
-			Routes: make([]Layer4Route, 0),
-		}
-	}
-
 	initConfig := Config{
 		Apps: Apps{
 			HTTP: HTTP{Servers: map[string]*Server{
@@ -57,7 +40,6 @@ func (c *caddyClient) Init(ctx context.Context, caddyUrl string) error {
 					Routes: make([]Route, 0),
 				},
 			}},
-			Layer4: Layer4{Servers: layer4Servers},
 		},
 		Admin: AdminConfig{
 			Listen: caddyAdminAccessPort,
@@ -75,8 +57,6 @@ func (c *caddyClient) ApplyConfig(ctx context.Context, caddyUrl string, instance
 		return c.patchBackendConfig(ctx, caddyUrl, deployment)
 	case types.InstanceTypeFrontend:
 		return c.patchFrontendConfig(ctx, caddyUrl, deployment)
-	case types.InstanceTypeDatabase:
-		return c.patchDatabaseConfig(ctx, caddyUrl, deployment)
 	default:
 		return errors.New("instance type not supported: " + string(instanceType))
 	}
@@ -143,7 +123,6 @@ func (c *caddyClient) patchBackendConfig(ctx context.Context, caddyUrl string, d
 		return err
 	}
 
-	// backend-stage.paas.local
 	routes := cfg.Apps.HTTP.Servers[mainServer].Routes
 	routeIdx := c.findRouteIndex(routes, deployment.AccessURL(types.InstanceTypeBackend))
 	upStreams := make([]Upstream, 0, deployment.Instances)
@@ -200,57 +179,11 @@ func (c *caddyClient) patchFrontendConfig(ctx context.Context, caddyUrl string, 
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
 }
 
-func (c *caddyClient) patchDatabaseConfig(ctx context.Context, caddyUrl string, deployment *types.Deployment) error {
-	cfg := &Config{}
-	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
-	if err != nil {
-		return err
-	}
-
-	routes := cfg.Apps.Layer4.Servers["postgresql_proxy"].Routes
-	upStreams := make([]Layer4Upstream, 0)
-	routeIdx := c.findLayer4RouteIndex(routes, deployment.AccessURL(types.InstanceTypeDatabase))
-	dbInternalUrl := fmt.Sprintf("postgres-%s-%s:5432", deployment.Application.Name, deployment.Environment)
-	// hostUrl := deployment.AccessURL(types.InstanceTypeDatabase)
-	upStreams = append(upStreams, Layer4Upstream{
-		Dial: []string{dbInternalUrl},
-	})
-	handles := make([]Layer4Handle, 0)
-	handles = append(handles, Layer4Handle{Handler: "proxy", Upstreams: upStreams})
-	updatedRoute := Layer4Route{
-		Handle: handles,
-		Match: []Layer4Match{
-			{RemoteIP: Layer4RemoteIP{Ranges: []string{"192.168.1.67/24"}}},
-		},
-	}
-
-	patchUrl := fmt.Sprintf("%sapps/layer4/servers/postgresql_proxy/routes/%d", caddyUrl, routeIdx)
-	if routeIdx == -1 {
-		patchUrl = fmt.Sprintf("%sapps/layer4/servers/postgresql_proxy/routes", caddyUrl)
-		routes = append(routes, updatedRoute)
-		return c.httpClient.Do(ctx, "PATCH", patchUrl, routes, nil)
-	}
-
-	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
-}
-
 func (c *caddyClient) findRouteIndex(routes []Route, host string) int {
 	for idx := 0; idx < len(routes); idx++ {
 		next := routes[idx]
 		for _, h := range next.Match {
 			if sarabi.StrContains(host, h.Host) {
-				return idx
-			}
-		}
-	}
-	return -1
-}
-
-func (c *caddyClient) findLayer4RouteIndex(routes []Layer4Route, host string) int {
-	for idx := 0; idx < len(routes); idx++ {
-		next := routes[idx]
-		for _, h := range next.Match {
-			if sarabi.StrContains(host, h.RemoteIP.Ranges) {
 				return idx
 			}
 		}

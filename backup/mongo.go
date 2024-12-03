@@ -27,9 +27,17 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 	logger.Info("starting mongo backup",
 		zap.String("application", params.Application.Name),
 		zap.String("env", params.Environment))
+	username, err := findVar("MONGO_INITDB_ROOT_USERNAME", params.DatabaseVars)
+	if err != nil {
+		return ExecuteResponse{}, err
+	}
+	password, err := findVar("MONGO_INITDB_ROOT_PASSWORD", params.DatabaseVars)
+	if err != nil {
+		return ExecuteResponse{}, err
+	}
+
 	var st storage.Storage
 	var stType storage.Type
-	var err error
 	if params.StorageCredential == nil {
 		logger.Info("Object storage credential not configured, using File system storage for backup")
 		st = storage.NewFileStorage()
@@ -43,9 +51,12 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 	}
 
 	resultPath := fmt.Sprintf("tmp/%s.tar", uuid.NewString())
+	//  mongodump -u user -p password --out file.tar
 	cmd := strslice.StrSlice{
 		"mongodump",
-		"-out",
+		"-u", username.Value,
+		"-p", password.Value,
+		"--out",
 		resultPath,
 	}
 
@@ -63,6 +74,9 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 	if err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to copy dump file")
 	}
+
+	logger.Info("saving",
+		zap.Any("stat", dmpFile.Stat))
 
 	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")

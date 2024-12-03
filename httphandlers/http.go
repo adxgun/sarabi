@@ -308,3 +308,29 @@ func (handler *ApiHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 
 	ok(w, "success", result)
 }
+
+func (handler *ApiHandler) ListApplications(w http.ResponseWriter, r *http.Request) {
+	apps, err := handler.mn.ListApplications(context.Background())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "success", apps)
+}
+
+func (handler *ApiHandler) ListDeployments(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	deps, err := handler.mn.ListDeployments(context.Background(), applicationID)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "success", deps)
+}

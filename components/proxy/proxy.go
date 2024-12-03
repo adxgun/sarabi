@@ -83,6 +83,7 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 	bindVolumes := []string{
 		fmt.Sprintf("%s:/etc/caddy/Caddyfile", defaultConfigPath),
 		"/var/caddy/share/:/var/caddy/share",
+		"/var/sarabi/data/caddy_data:/caddy_data",
 	}
 	params := docker.StartContainerParams{
 		Image:        caddyImageName,

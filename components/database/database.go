@@ -7,13 +7,11 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"sarabi/components"
-	proxycomponent "sarabi/components/proxy"
 	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
 	"sarabi/logger"
 	"sarabi/service"
 	"sarabi/storage"
-	"sarabi/types"
 )
 
 type databaseComponent struct {
@@ -103,15 +101,6 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	}
 	startResp, err := d.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {
-		return nil, err
-	}
-
-	err = d.caddyClient.ApplyConfig(ctx, proxycomponent.ProxyServerConfigUrl, types.InstanceTypeDatabase, deployment)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := d.caddyClient.Wait(ctx, proxycomponent.ProxyServerConfigUrl); err != nil {
 		return nil, err
 	}
 

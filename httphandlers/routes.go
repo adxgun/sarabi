@@ -18,6 +18,8 @@ func Routes(h *ApiHandler) chi.Router {
 		rr.Post("/applications/add-credentials", h.AddCredentials)
 		rr.Get("/backups/{id}/download", h.DownloadBackup)
 		rr.Get("/applications/{application_id}/backups", h.ListBackups)
+		rr.Get("/applications/{application_id}/deployments", h.ListDeployments)
+		rr.Get("/applications", h.ListApplications)
 
 		rr.Get("/h", func(writer http.ResponseWriter, request *http.Request) {
 			ok(writer, "Hoi, we're HTTPs live!", struct{}{})

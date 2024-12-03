@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	errors2 "github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -23,6 +24,7 @@ import (
 	"sarabi/storage"
 	"sarabi/types"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -99,7 +101,6 @@ func (m *manager) CreateApplication(ctx context.Context, param types.CreateAppli
 func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types.DeployResponse, error) {
 	var backendDeployment *types.Deployment
 	var frontendDeployment *types.Deployment
-	var deployments = make([]*types.Deployment, 0)
 	var feDomains []string
 	var beDomains []string
 
@@ -162,8 +163,6 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		if err := m.setupAppVariables(ctx, backendDeployment); err != nil {
 			return nil, errors2.Wrap(err, "failed to setup app variables")
 		}
-
-		deployments = append(deployments, backendDeployment)
 	}
 
 	if param.Frontend != nil {
@@ -182,7 +181,6 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 			return nil, errors2.Wrap(err, "failed to save frontend artifact")
 		}
 		frontendDeployment = fd
-		deployments = append(deployments, frontendDeployment)
 	}
 
 	if backendDeployment != nil {
@@ -195,7 +193,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		if err := backend.Cleanup(ctx, result); err != nil {
 			logger.Warn("cleanup failed: ", zap.Error(err))
 		}
-		beDomains = append(beDomains, backendDeployment.AccessURL(types.InstanceTypeBackend))
+		beDomains = append(beDomains, m.toURL(backendDeployment.AccessURL(types.InstanceTypeBackend)))
 	}
 
 	if frontendDeployment != nil {
@@ -207,7 +205,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		if err := frontend.Cleanup(ctx, result); err != nil {
 			logger.Warn("cleanup failed: ", zap.Error(err))
 		}
-		feDomains = append(feDomains, frontendDeployment.AccessURL(types.InstanceTypeBackend))
+		feDomains = append(feDomains, m.toURL(frontendDeployment.AccessURL(types.InstanceTypeFrontend)))
 	}
 
 	domains, err := m.domainService.FindByApplicationID(ctx, param.ApplicationID)
@@ -217,10 +215,10 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 
 	for _, do := range domains {
 		if do.InstanceType == types.InstanceTypeFrontend && do.Environment == param.Environment {
-			feDomains = append(feDomains, do.Name)
+			feDomains = append(feDomains, m.toURL(do.Name))
 		}
 		if do.InstanceType == types.InstanceTypeBackend && do.Environment == param.Environment {
-			beDomains = append(beDomains, do.Name)
+			beDomains = append(beDomains, m.toURL(do.Name))
 		}
 	}
 
@@ -607,14 +605,12 @@ func (m *manager) setupAppVariables(ctx context.Context, deployment *types.Deplo
 		return item.Environment == deployment.Environment
 	})
 	deploymentSecrets = append(deploymentSecrets, secret)
-	vars := lo.Map(deploymentSecrets, func(item *types.Secret, index int) []string {
-		return []string{
-			item.Name,
-			item.Value,
-			item.Environment,
-		}
-	})
-
-	logger.Info("env vars", zap.Any("envs", vars))
 	return m.secretService.CreateDeploymentSecrets(ctx, deployment.ID, deploymentSecrets)
+}
+
+func (m *manager) toURL(s string) string {
+	if strings.HasPrefix(s, "https") {
+		return s
+	}
+	return fmt.Sprintf("https://%s", s)
 }

@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
-	"go.uber.org/zap"
 	"sarabi"
 	"sarabi/database"
-	"sarabi/logger"
 	"sarabi/types"
 	"time"
 )
@@ -145,9 +143,6 @@ func (s *secretService) CreateCredentials(ctx context.Context, params types.AddC
 
 		cred, err := s.credentialRepository.FindByName(ctx, params.ApplicationID, params.Provider, v.Key)
 		if err == nil && cred.ID != uuid.Nil {
-			logger.Info("updating credential values",
-				zap.Any("cred", cred),
-				zap.String("value", credValue))
 			if err := s.credentialRepository.UpdateCredentialValue(ctx, cred.ID, credValue); err != nil {
 				return nil, err
 			}

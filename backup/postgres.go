@@ -57,7 +57,7 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 		stType = storage.TypeS3
 	}
 
-	resultPath := fmt.Sprintf("tmp/%s.sql", uuid.NewString())
+	resultPath := fmt.Sprintf("/tmp/%s.sql", uuid.NewString())
 	cmd := strslice.StrSlice{
 		"pg_dump",
 		"-U", username.Value,
@@ -84,6 +84,9 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 		return ExecuteResponse{}, errors.Wrap(err, "failed to copy dump file")
 	}
 
+	logger.Info("saving",
+		zap.Any("stat", dmpFile.Stat))
+
 	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
 	}
@@ -100,5 +103,5 @@ func findVar(name string, in []*types.Secret) (*types.Secret, error) {
 			return next, nil
 		}
 	}
-	return nil, fmt.Errorf("secret: %s was not found", name)
+	return nil, fmt.Errorf("var: %s was not found", name)
 }

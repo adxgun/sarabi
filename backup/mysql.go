@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/docker/docker/api/types/strslice"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sarabi/integrations/docker"
 	"sarabi/logger"
 	"sarabi/storage"
-	"sarabi/types"
 	"time"
 )
 
@@ -56,26 +56,36 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 		stType = storage.TypeS3
 	}
 
+	// sh -c 'mysqldump -u sample-go-stage-user -p"password" mysql-sample-go-stage > /tmp/uuid.sql'
+	resultPath := fmt.Sprintf("/tmp/%s.sql", uuid.NewString())
+	cmdStr := fmt.Sprintf(`mysqldump -u %s -p"%s" %s > %s`,
+		username.Value, password.Value, dbName.Value, resultPath)
 	cmd := strslice.StrSlice{
-		"mysqldump",
-		"-u", username.Value,
-		fmt.Sprintf("-p%s", password.Value),
-		"-d", dbName.Value,
+		"sh",
+		"-c",
+		cmdStr,
 	}
-
+	envs := []string{
+		"MYSQL_PWD=" + password.Value,
+	}
 	containerName := fmt.Sprintf("mysql-%s-%s", params.Application.Name, params.Environment)
-	reader, err := m.dockerClient.ContainerExec(ctx, docker.ContainerExecParams{
+	_, err = m.dockerClient.ContainerExec(ctx, docker.ContainerExecParams{
 		ContainerName: containerName,
 		Cmd:           cmd,
+		Envs:          envs,
 	})
 	if err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to execute mysqldump")
 	}
 
 	location := fmt.Sprintf("%s/%s-%s/mysql-%s.sql", storage.BackupDir, params.Application.Name, params.Environment, time.Now().Format("2006_01_02_03_04pm"))
-	dmpFile := types.File{
-		Content: reader,
+	dmpFile, err := m.dockerClient.CopyFromContainer(ctx, containerName, resultPath)
+	if err != nil {
+		return ExecuteResponse{}, err
 	}
+
+	logger.Info("saving",
+		zap.Any("stat", dmpFile.Stat))
 
 	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")

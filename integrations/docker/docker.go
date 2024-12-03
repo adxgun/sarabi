@@ -13,10 +13,13 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sarabi/bundler"
+	"sarabi/logger"
 	"sarabi/types"
 	"strings"
 	"time"
@@ -309,7 +312,14 @@ func (d *dockerClient) ExtractFiles(ctx context.Context, containerName, fileDir 
 }
 
 func (d *dockerClient) ConnectContainer(ctx context.Context, containerName, networkName string) error {
-	return d.hostClient.NetworkConnect(ctx, networkName, containerName, nil)
+	err := d.hostClient.NetworkConnect(ctx, networkName, containerName, nil)
+	if err != nil && strings.Contains(err.Error(), "already exists in network") {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error) {
@@ -333,8 +343,9 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 	if err != nil {
 		return nil, err
 	}
+
 	if execResponse.ExitCode == 0 {
-		return hr.Reader, nil
+		return hr.Conn, nil
 	}
 
 	_, stdErr, err := ReadExecResponse(hr.Conn)
@@ -345,14 +356,57 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 	return nil, fmt.Errorf("exec cmd error: %s", stdErr)
 }
 
+// CopyFromContainer copy file from the specified container from the specified file path. Sometimes, it takes a few seconds for the file
+// to be available e.g after a database dump, so we included a retry to wait for the file to be available
 func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error("error recovery",
+				zap.Any("err", err),
+				zap.String("container", containerName),
+				zap.String("fp", filePath))
+		}
+	}()
+	var (
+		retries = 10
+		delay   = 100 * time.Millisecond
+	)
+
+	for i := 0; i < retries; i++ {
+		_, err := d.hostClient.ContainerStatPath(ctx, containerName, filePath)
+		if err == nil {
+			break
+		}
+
+		time.Sleep(delay)
+		delay *= 2
+	}
+
 	r, stat, err := d.hostClient.CopyFromContainer(ctx, containerName, filePath)
 	if err != nil {
 		return types.File{}, err
 	}
 
+	// TODO: file should be processed by the caller so as to be able to close r. r#Close()
+	tarReader := tar.NewReader(r)
+	var content io.Reader
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return types.File{}, err
+		}
+
+		if header.Name == filePath || header.Name == stat.Name || filepath.Base(header.Name) == stat.Name {
+			content = tarReader
+			break
+		}
+	}
+
 	return types.File{
-		Content: r,
+		Content: content,
 		Stat:    types.FileStat{Size: stat.Size, Name: stat.Name},
 	}, nil
 }
