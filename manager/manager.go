@@ -16,7 +16,6 @@ import (
 	backendcomponent "sarabi/components/backend"
 	databasecomponent "sarabi/components/database"
 	frontendcomponent "sarabi/components/frontend"
-	proxycomponent "sarabi/components/proxy"
 	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
 	"sarabi/logger"
@@ -29,7 +28,7 @@ import (
 )
 
 const (
-	defaultBackupInterval = time.Minute * 1 // 30 mins
+	defaultBackupInterval = time.Minute * 10 // 30 mins
 )
 
 type (
@@ -496,7 +495,7 @@ func (m *manager) AddDomain(ctx context.Context, applicationID uuid.UUID, params
 		return nil, err
 	}
 
-	err = m.caddyClient.ApplyDomainConfig(ctx, proxycomponent.ProxyServerConfigUrl, domain, deployment, types.DomainOperationAdd)
+	err = m.caddyClient.ApplyDomainConfig(ctx, domain, deployment, types.DomainOperationAdd)
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +514,7 @@ func (m *manager) RemoveDomain(ctx context.Context, applicationID uuid.UUID, nam
 		return err
 	}
 
-	err = m.caddyClient.ApplyDomainConfig(ctx, proxycomponent.ProxyServerConfigUrl, removed, deployment, types.DomainOperationRemove)
+	err = m.caddyClient.ApplyDomainConfig(ctx, removed, deployment, types.DomainOperationRemove)
 	if err != nil {
 		return err
 	}
@@ -546,6 +545,103 @@ func (m *manager) ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*
 }
 
 func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error {
+	logger.Info("destroying application",
+		zap.String("environment", environment),
+		zap.Any("applicationID", applicationID),
+		zap.Bool("destroy_all?", environment == ""))
+
+	application, err := m.appService.Get(ctx, applicationID)
+	if err != nil {
+		return err
+	}
+
+	allDeployments, err := m.appService.FindDeploymentsByApplication(ctx, applicationID)
+	if err != nil {
+		return err
+	}
+	var toDestroy []*types.Deployment
+	switch environment {
+	case "":
+		toDestroy = allDeployments
+	default:
+		toDestroy = lo.Filter(allDeployments, func(item *types.Deployment, index int) bool {
+			return item.Environment == environment
+		})
+	}
+
+	backendDeployments := m.findDeploymentsByInstanceType(toDestroy, types.InstanceTypeBackend)
+	frontendDeployments := m.findDeploymentsByInstanceType(toDestroy, types.InstanceTypeFrontend)
+	dbDeployments := m.findDeploymentsByInstanceType(toDestroy, types.InstanceTypeDatabase)
+
+	for _, next := range backendDeployments {
+		for idx := 0; idx < next.Instances; idx++ {
+			_ = m.dockerClient.StopAndRemoveContainer(ctx, next.ContainerName(idx))
+		}
+		err = os.Remove(next.BinPath())
+		if err != nil {
+			logger.Warn("failed to remove deployment bin: ", zap.Error(err))
+		} else {
+			logger.Info("removed deployment bin",
+				zap.String("path", next.BinPath()))
+		}
+		// TODO: remove caddy config
+		if err := m.caddyClient.RemoveConfig(ctx, next); err != nil {
+			return err
+		}
+
+		err = m.secretService.DeleteDeploymentSecrets(ctx, next.ID)
+		if err != nil {
+			return err
+		}
+		err = m.appService.UpdateDeploymentStatus(ctx, next.ID, types.DeploymentStatusStopped)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, next := range frontendDeployments {
+		err = os.Remove(next.SiteContentPath())
+		if err != nil {
+			logger.Warn("failed to remove frontend site content for deployment",
+				zap.String("deployment_id", next.ID.String()),
+				zap.String("path", next.SiteContentPath()),
+				zap.Error(err))
+		} else {
+			logger.Info("remove deployment site content",
+				zap.String("path", next.SiteContentPath()))
+		}
+
+		err = m.appService.UpdateDeploymentStatus(ctx, next.ID, types.DeploymentStatusStopped)
+		if err := m.caddyClient.RemoveConfig(ctx, next); err != nil {
+			return err
+		}
+	}
+
+	uniqueEnvs := make(map[string]bool)
+	var envs []string
+	for _, next := range toDestroy {
+		uniqueEnvs[next.Environment] = true
+	}
+	for k, _ := range uniqueEnvs {
+		envs = append(envs, k)
+	}
+	for _, se := range application.StorageEngines {
+		for _, env := range envs {
+			dbContainerName := fmt.Sprintf("%s-%s-%s", se, application.Name, env)
+			_ = m.dockerClient.StopAndRemoveContainer(ctx, dbContainerName)
+		}
+	}
+
+	for _, next := range dbDeployments {
+		err = m.secretService.DeleteDeploymentSecrets(ctx, next.ID)
+		if err != nil {
+			return err
+		}
+		err = m.appService.UpdateDeploymentStatus(ctx, next.ID, types.DeploymentStatusStopped)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -613,4 +709,10 @@ func (m *manager) toURL(s string) string {
 		return s
 	}
 	return fmt.Sprintf("https://%s", s)
+}
+
+func (m *manager) findDeploymentsByInstanceType(deps []*types.Deployment, instanceType types.InstanceType) []*types.Deployment {
+	return lo.Filter(deps, func(item *types.Deployment, index int) bool {
+		return item.InstanceType == instanceType
+	})
 }

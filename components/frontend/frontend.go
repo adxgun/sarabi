@@ -7,7 +7,6 @@ import (
 	"os"
 	"sarabi/bundler"
 	"sarabi/components"
-	proxycomponent "sarabi/components/proxy"
 	"sarabi/integrations/caddy"
 	"sarabi/integrations/docker"
 	"sarabi/logger"
@@ -53,7 +52,7 @@ func (f *frontendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		return nil, err
 	}
 
-	err = f.caddyClient.ApplyConfig(ctx, proxycomponent.ProxyServerConfigUrl, types.InstanceTypeFrontend, deployment)
+	err = f.caddyClient.ApplyConfig(ctx, types.InstanceTypeFrontend, deployment)
 	if err != nil {
 		return nil, err
 	}

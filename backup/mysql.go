@@ -84,9 +84,11 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 		return ExecuteResponse{}, err
 	}
 
-	logger.Info("saving",
-		zap.Any("stat", dmpFile.Stat))
+	defer func() {
+		_ = dmpFile.Content.Close()
+	}()
 
+	logger.Info("original file size", zap.Any("size", dmpFile.Stat.Size))
 	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
 	}

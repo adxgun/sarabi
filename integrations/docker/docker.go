@@ -12,11 +12,12 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"runtime"
 	"sarabi/bundler"
 	"sarabi/logger"
@@ -48,7 +49,8 @@ type dockerClient struct {
 }
 
 func NewDockerClient() (Docker, error) {
-	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	c, err := client.NewClientWithOpts(client.FromEnv,
+		client.WithAPIVersionNegotiation(), client.WithTimeout(10*time.Minute))
 	if err != nil {
 		return nil, err
 	}
@@ -359,14 +361,6 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 // CopyFromContainer copy file from the specified container from the specified file path. Sometimes, it takes a few seconds for the file
 // to be available e.g after a database dump, so we included a retry to wait for the file to be available
 func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error) {
-	defer func() {
-		if err := recover(); err != nil {
-			logger.Error("error recovery",
-				zap.Any("err", err),
-				zap.String("container", containerName),
-				zap.String("fp", filePath))
-		}
-	}()
 	var (
 		retries = 10
 		delay   = 100 * time.Millisecond
@@ -382,32 +376,35 @@ func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, fil
 		delay *= 2
 	}
 
-	r, stat, err := d.hostClient.CopyFromContainer(ctx, containerName, filePath)
+	ff := fmt.Sprintf("%s.sql", uuid.NewString())
+	containerAndPath := fmt.Sprintf("%s:%s", containerName, filePath)
+	cmd := exec.Command("docker", "cp", containerAndPath, ff)
+	if err := cmd.Run(); err != nil {
+		return types.File{}, err
+	}
+
+	fi, err := os.Open(ff)
 	if err != nil {
 		return types.File{}, err
 	}
 
-	// TODO: file should be processed by the caller so as to be able to close r. r#Close()
-	tarReader := tar.NewReader(r)
-	var content io.Reader
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return types.File{}, err
-		}
-
-		if header.Name == filePath || header.Name == stat.Name || filepath.Base(header.Name) == stat.Name {
-			content = tarReader
-			break
-		}
+	stat, err := os.Stat(ff)
+	if err != nil {
+		return types.File{}, err
 	}
 
+	logger.Info("copy cmd",
+		zap.String("container", containerName),
+		zap.Any("size", stat.Size()),
+		zap.String("name", stat.Name()))
+
 	return types.File{
-		Content: content,
-		Stat:    types.FileStat{Size: stat.Size, Name: stat.Name},
+		Content: fi,
+		Stat: types.FileStat{
+			Size: stat.Size(),
+			Name: stat.Name(),
+			Mode: stat.Mode(),
+		},
 	}, nil
 }
 

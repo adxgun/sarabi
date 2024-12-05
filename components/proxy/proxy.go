@@ -85,6 +85,7 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		"/var/caddy/share/:/var/caddy/share",
 		"/var/sarabi/data/caddy_data:/caddy_data",
 	}
+	// 518,061
 	params := docker.StartContainerParams{
 		Image:        caddyImageName,
 		Container:    ProxyServerName,

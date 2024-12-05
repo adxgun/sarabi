@@ -10,6 +10,7 @@ import (
 	"sarabi/integrations/docker"
 	"sarabi/logger"
 	"sarabi/storage"
+	"sarabi/types"
 	"time"
 )
 
@@ -75,10 +76,17 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 		return ExecuteResponse{}, errors.Wrap(err, "failed to copy dump file")
 	}
 
-	logger.Info("saving",
-		zap.Any("stat", dmpFile.Stat))
+	defer func() {
+		_ = dmpFile.Content.Close()
+	}()
 
-	if err := st.Save(ctx, location, dmpFile); err != nil {
+	f := types.File{
+		Content: dmpFile.Content,
+		// -1 allows the object storage sdk(minio) detects the size
+		Stat: types.FileStat{Size: -1, Name: dmpFile.Stat.Name},
+	}
+
+	if err := st.Save(ctx, location, f); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
 	}
 

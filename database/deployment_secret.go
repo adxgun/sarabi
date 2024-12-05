@@ -33,3 +33,10 @@ func (d *deploymentSecretRepository) FindAll(ctx context.Context, deploymentID u
 
 	return values, nil
 }
+
+func (d *deploymentSecretRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return d.db.
+		WithContext(ctx).
+		Where("id = ?", id).
+		Delete(&types.DeploymentSecret{}).Error
+}

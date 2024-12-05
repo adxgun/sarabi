@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"github.com/pkg/errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -159,4 +160,22 @@ func WriteToPath(r io.Reader, path string) error {
 		return err
 	}
 	return nil
+}
+
+func ExtractSingleTar(filePath, originalPath string, r io.ReadCloser) (io.Reader, error) {
+	tarReader := tar.NewReader(r)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if header.Name == filePath || header.Name == originalPath || filepath.Base(header.Name) == originalPath {
+			return tarReader, nil
+		}
+	}
+	return nil, errors.New("file not found: " + filePath)
 }

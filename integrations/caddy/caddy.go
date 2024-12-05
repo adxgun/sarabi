@@ -14,13 +14,15 @@ var (
 	mainAccessListenPort = []string{":80", ":443"}
 	caddyAdminAccessPort = ":2019"
 	mainServer           = "main"
+	caddyUrl             = "http://localhost:2019/config/"
 )
 
 type Client interface {
-	Init(ctx context.Context, caddyUrl string) error
-	ApplyConfig(ctx context.Context, caddyUrl string, instanceType types.InstanceType, deployment *types.Deployment) error
-	ApplyDomainConfig(ctx context.Context, caddyUrl string, domain *types.Domain, deployment *types.Deployment, op types.DomainOperation) error
-	Wait(ctx context.Context, caddyUrl string) error
+	Init(ctx context.Context) error
+	ApplyConfig(ctx context.Context, instanceType types.InstanceType, deployment *types.Deployment) error
+	ApplyDomainConfig(ctx context.Context, domain *types.Domain, deployment *types.Deployment, op types.DomainOperation) error
+	RemoveConfig(ctx context.Context, deployment *types.Deployment) error
+	Wait(ctx context.Context) error
 }
 
 type caddyClient struct {
@@ -31,7 +33,7 @@ func NewCaddyClient() Client {
 	return &caddyClient{httpClient: newCaddyHttpClient()}
 }
 
-func (c *caddyClient) Init(ctx context.Context, caddyUrl string) error {
+func (c *caddyClient) Init(ctx context.Context) error {
 	initConfig := Config{
 		Apps: Apps{
 			HTTP: HTTP{Servers: map[string]*Server{
@@ -51,12 +53,12 @@ func (c *caddyClient) Init(ctx context.Context, caddyUrl string) error {
 
 // ApplyConfig apply configuration for a specific instance type
 // it sends a request to get current caddy configuration, apply the patch and then update caddy with the new config
-func (c *caddyClient) ApplyConfig(ctx context.Context, caddyUrl string, instanceType types.InstanceType, deployment *types.Deployment) error {
+func (c *caddyClient) ApplyConfig(ctx context.Context, instanceType types.InstanceType, deployment *types.Deployment) error {
 	switch instanceType {
 	case types.InstanceTypeBackend:
-		return c.patchBackendConfig(ctx, caddyUrl, deployment)
+		return c.patchBackendConfig(ctx, deployment)
 	case types.InstanceTypeFrontend:
-		return c.patchFrontendConfig(ctx, caddyUrl, deployment)
+		return c.patchFrontendConfig(ctx, deployment)
 	default:
 		return errors.New("instance type not supported: " + string(instanceType))
 	}
@@ -65,7 +67,7 @@ func (c *caddyClient) ApplyConfig(ctx context.Context, caddyUrl string, instance
 // Wait issues a call to /config/ endpoint
 // the aim is to wait until caddy is running and available to process request(s).
 // featuring exponential storage and eventual failure after 10 trials
-func (c *caddyClient) Wait(ctx context.Context, caddyUrl string) error {
+func (c *caddyClient) Wait(ctx context.Context) error {
 	var (
 		retries = 10
 		delay   = 100 * time.Millisecond
@@ -84,7 +86,7 @@ func (c *caddyClient) Wait(ctx context.Context, caddyUrl string) error {
 	return errors.New("caddy failed to start")
 }
 
-func (c *caddyClient) ApplyDomainConfig(ctx context.Context, caddyUrl string, domain *types.Domain, deployment *types.Deployment, op types.DomainOperation) error {
+func (c *caddyClient) ApplyDomainConfig(ctx context.Context, domain *types.Domain, deployment *types.Deployment, op types.DomainOperation) error {
 	cfg := &Config{}
 	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
 	if err != nil {
@@ -116,7 +118,7 @@ func (c *caddyClient) ApplyDomainConfig(ctx context.Context, caddyUrl string, do
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
 }
 
-func (c *caddyClient) patchBackendConfig(ctx context.Context, caddyUrl string, deployment *types.Deployment) error {
+func (c *caddyClient) patchBackendConfig(ctx context.Context, deployment *types.Deployment) error {
 	cfg := &Config{}
 	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
 	if err != nil {
@@ -151,7 +153,7 @@ func (c *caddyClient) patchBackendConfig(ctx context.Context, caddyUrl string, d
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
 }
 
-func (c *caddyClient) patchFrontendConfig(ctx context.Context, caddyUrl string, deployment *types.Deployment) error {
+func (c *caddyClient) patchFrontendConfig(ctx context.Context, deployment *types.Deployment) error {
 	cfg := &Config{}
 	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
 	if err != nil {
@@ -177,6 +179,23 @@ func (c *caddyClient) patchFrontendConfig(ctx context.Context, caddyUrl string, 
 	}
 
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
+}
+
+func (c *caddyClient) RemoveConfig(ctx context.Context, deployment *types.Deployment) error {
+	cfg := &Config{}
+	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
+	if err != nil {
+		return err
+	}
+
+	routes := cfg.Apps.HTTP.Servers[mainServer].Routes
+	routeIdx := c.findRouteIndex(routes, deployment.AccessURL(deployment.InstanceType))
+	if routeIdx == -1 {
+		return nil
+	}
+
+	patchUrl := fmt.Sprintf("%sapps/http/servers/%s/routes/%d", caddyUrl, mainServer, routeIdx)
+	return c.httpClient.Do(ctx, "DELETE", patchUrl, nil, nil)
 }
 
 func (c *caddyClient) findRouteIndex(routes []Route, host string) int {

@@ -102,7 +102,7 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 		return nil, err
 	}
 
-	err = b.caddyClient.ApplyConfig(context.Background(), proxycomponent.ProxyServerConfigUrl, types.InstanceTypeBackend, deployment)
+	err = b.caddyClient.ApplyConfig(context.Background(), types.InstanceTypeBackend, deployment)
 	if err != nil {
 		return nil, err
 	}

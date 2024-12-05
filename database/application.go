@@ -44,6 +44,6 @@ func (a *applicationRepository) FindByName(ctx context.Context, name string) (*t
 
 func (a *applicationRepository) FindAll(ctx context.Context) ([]*types.Application, error) {
 	resp := make([]*types.Application, 0)
-	err := a.db.WithContext(ctx).Where("deleted_at = NULL").Find(&resp).Error
+	err := a.db.WithContext(ctx).Find(&resp).Error
 	return resp, err
 }

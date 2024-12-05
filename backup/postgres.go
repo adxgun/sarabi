@@ -84,9 +84,11 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 		return ExecuteResponse{}, errors.Wrap(err, "failed to copy dump file")
 	}
 
-	logger.Info("saving",
-		zap.Any("stat", dmpFile.Stat))
+	defer func() {
+		_ = dmpFile.Content.Close()
+	}()
 
+	// 2667057d-b81c-4428-8584-383961150689.sql
 	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
 	}

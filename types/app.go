@@ -131,7 +131,7 @@ func (a *Deployment) NetworkName() string {
 }
 
 func (a *Deployment) DatabaseMountVolume() string {
-	return fmt.Sprintf("/var/sarabi/data/storage/%s-%s/data", a.Application.Name, a.Environment)
+	return fmt.Sprintf("/var/sarabi/data/storage/%s-%s/data", strings.ReplaceAll(a.ApplicationID.String(), "-", ""), a.Environment)
 }
 
 func (a *Deployment) ContainerName(instanceId int) string {

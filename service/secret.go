@@ -19,6 +19,7 @@ type SecretService interface {
 	FindDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) ([]*types.Secret, error)
 	CreateCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.Credential, error)
 	FindApplicationCredentials(ctx context.Context, applicationID uuid.UUID, provider string) ([]*types.Credential, error)
+	DeleteDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) error
 }
 
 type secretService struct {
@@ -184,6 +185,20 @@ func (s *secretService) FindApplicationCredentials(ctx context.Context, applicat
 		result = append(result, next)
 	}
 	return result, nil
+}
+
+func (s *secretService) DeleteDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) error {
+	vars, err := s.deploymentSecretRepository.FindAll(ctx, deploymentID)
+	if err != nil {
+		return err
+	}
+
+	for _, v := range vars {
+		if err := s.deploymentSecretRepository.Delete(ctx, v.ID); err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 func FindSecret(name string, secrets []*types.Secret) (*types.Secret, error) {

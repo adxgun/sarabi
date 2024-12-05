@@ -32,14 +32,16 @@ type (
 		secretService            SecretService
 		backupSettingsRepository database.BackupSettingsRepository
 		backupRepository         database.BackupRepository
-		scheduler                gocron.Scheduler
+		sscheduler               gocron.Scheduler
+		scheduler                backup.Scheduler
 		started                  bool
 	}
 )
 
 func NewBackupService(dc docker.Docker, service ApplicationService,
 	ss SecretService, backupSettings database.BackupSettingsRepository, repository database.BackupRepository) (BackupService, error) {
-	scheduler, err := gocron.NewScheduler()
+	scheduler, err := gocron.NewScheduler(
+		gocron.WithLimitConcurrentJobs(10, gocron.LimitModeWait))
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +50,8 @@ func NewBackupService(dc docker.Docker, service ApplicationService,
 		applicationService:       service,
 		secretService:            ss,
 		backupSettingsRepository: backupSettings,
-		scheduler:                scheduler,
+		scheduler:                backup.NewScheduler(),
+		sscheduler:               scheduler,
 		backupRepository:         repository,
 	}, nil
 }
@@ -106,6 +109,7 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 		if err != nil {
 			logger.Error("backup returned error",
 				zap.Error(err),
+				zap.String("application", application.Name),
 				zap.Any("storage_engine", se))
 		} else {
 			logger.Info("backup completed",
@@ -132,18 +136,37 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 	return nil
 }
 
+func (b backupService) runBG(ctx context.Context, settings *types.BackupSettings) error {
+	go func() {
+		if err := b.run(ctx, settings); err != nil {
+			logger.Info("run failed", zap.Error(err))
+		}
+	}()
+	return nil
+}
+
 func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSettings) error {
-	job, err := b.scheduler.NewJob(
+
+	/*job, err := b.scheduler.NewJob(
 		gocron.DurationJob(bc.BackupInterval),
-		gocron.NewTask(b.run, ctx, bc),
-		gocron.WithSingletonMode(gocron.LimitModeWait))
+		gocron.NewTask(b.runBG, ctx, bc))
 	if err != nil {
 		return err
 	}
 
 	logger.Info("backup job queued",
 		zap.String("Name", job.Name()),
-		zap.String("environment", bc.Environment))
+		zap.String("environment", bc.Environment))*/
+	j := backup.Job{
+		Interval: "* * * * *",
+		Task:     b.run,
+		Ctx:      ctx,
+		Setting:  bc,
+		Name:     bc.ID.String(),
+	}
+	if err := b.scheduler.Schedule(j); err != nil {
+		return err
+	}
 
 	if !b.started {
 		b.scheduler.Start()

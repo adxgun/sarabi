@@ -23,6 +23,7 @@ type SecretRepository interface {
 type DeploymentSecretRepository interface {
 	SaveAll(ctx context.Context, applicationSecrets []*types.DeploymentSecret) error
 	FindAll(ctx context.Context, deploymentID uuid.UUID) ([]*types.DeploymentSecret, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type DeploymentRepository interface {
