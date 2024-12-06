@@ -7,7 +7,7 @@ import (
 
 type (
 	response struct {
-		Error   bool
+		Error   bool        `json:"error"`
 		Message string      `json:"message"`
 		Data    interface{} `json:"data"`
 	}

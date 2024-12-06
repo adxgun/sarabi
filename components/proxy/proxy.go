@@ -99,11 +99,11 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		return nil, err
 	}
 
-	if err := p.caddyClient.Wait(ctx, ProxyServerConfigUrl); err != nil {
+	if err := p.caddyClient.Wait(ctx); err != nil {
 		return nil, err
 	}
 
-	if err := p.caddyClient.Init(ctx, ProxyServerConfigUrl); err != nil {
+	if err := p.caddyClient.Init(ctx); err != nil {
 		return nil, err
 	}
 

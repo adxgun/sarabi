@@ -14,6 +14,7 @@ import (
 	"sarabi/manager"
 	"sarabi/types"
 	"strings"
+	"time"
 )
 
 var (
@@ -333,4 +334,32 @@ func (handler *ApiHandler) ListDeployments(w http.ResponseWriter, r *http.Reques
 	}
 
 	ok(w, "success", deps)
+}
+
+func (handler *ApiHandler) Destroy(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	var body struct {
+		Environment string `json:"environment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	err = handler.mn.Destroy(ctx, applicationID, body.Environment)
+	if err != nil {
+		logger.Error("destroy failed",
+			zap.Error(err))
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "success", nil)
 }

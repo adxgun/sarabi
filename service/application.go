@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"sarabi/database"
 	"sarabi/types"
@@ -35,8 +36,8 @@ func NewApplicationService(repo database.ApplicationRepository, dr database.Depl
 }
 
 func (a *applicationService) Create(ctx context.Context, params types.CreateApplicationParams) (*types.Application, error) {
-	if app, err := a.applicationRepository.FindByName(ctx, params.Name); err == nil {
-		return app, nil
+	if _, err := a.applicationRepository.FindByName(ctx, params.Name); err == nil {
+		return nil, fmt.Errorf("application with name %s already exists", params.Name)
 	}
 
 	engine := make(types.StorageEngines, 0)

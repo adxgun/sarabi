@@ -46,9 +46,9 @@ type (
 
 type (
 	CreateApplicationParams struct {
-		Name          string `json:"name"`
-		Domain        string `json:"domain"`
-		StorageEngine string `json:"storage_engine"`
+		Name          string `json:"name" binding:"required"`
+		Domain        string `json:"domain" binding:"required"`
+		StorageEngine string `json:"storage_engine" binding:"required"`
 	}
 
 	DeployParams struct {

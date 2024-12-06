@@ -3,8 +3,7 @@ fspaas.db
 backend-app.tar.gz
 frontend-app.tar.gz
 example-app.tar.gz
-/client
-client
+/client/sarabiclient
 daemon.json
 .idea
 sarabi.aes
