@@ -287,6 +287,7 @@ func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, 
 		return err
 	}
 
+	logger.Info("merged vars", zap.Any("vars", createdVars))
 	err = m.secretService.CreateDeploymentSecrets(ctx, newBackendDeployment.ID, createdVars)
 	if err != nil {
 		return err
@@ -580,7 +581,10 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 
 	for _, next := range backendDeployments {
 		for idx := 0; idx < next.Instances; idx++ {
-			_ = m.dockerClient.StopAndRemoveContainer(ctx, next.ContainerName(idx))
+			_ = m.dockerClient.StopAndRemoveContainer(ctx, docker.StopContainerParams{
+				RemoveVolumes: true,
+				ContainerName: next.ContainerName(idx),
+			})
 		}
 		err = os.Remove(next.BinPath())
 		if err != nil {
@@ -589,7 +593,6 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 			logger.Info("removed deployment bin",
 				zap.String("path", next.BinPath()))
 		}
-		// TODO: remove caddy config
 		if err := m.caddyClient.RemoveConfig(ctx, next); err != nil {
 			return err
 		}
@@ -633,7 +636,9 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 	for _, se := range application.StorageEngines {
 		for _, env := range envs {
 			dbContainerName := fmt.Sprintf("%s-%s-%s", se, application.Name, env)
-			_ = m.dockerClient.StopAndRemoveContainer(ctx, dbContainerName)
+			_ = m.dockerClient.StopAndRemoveContainer(ctx, docker.StopContainerParams{
+				ContainerName: dbContainerName,
+			})
 		}
 	}
 

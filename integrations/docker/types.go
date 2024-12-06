@@ -48,6 +48,11 @@ type ContainerExecParams struct {
 	Envs          []string
 }
 
+type StopContainerParams struct {
+	RemoveVolumes bool
+	ContainerName string
+}
+
 func readRemoteResponse(body io.Reader) ([]RemoteResponse, error) {
 	resp := make([]RemoteResponse, 0)
 	scanner := bufio.NewScanner(body)

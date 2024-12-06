@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"github.com/google/uuid"
 	"io"
 )
 
@@ -13,6 +15,7 @@ type (
 	ApplicationService interface {
 		CreateApplication(ctx context.Context, params CreateApplicationParams) (Application, error)
 		Deploy(ctx context.Context, frontend, backend io.Reader, params DeployParams) (DeployResponse, error)
+		UpdateVariables(ctx context.Context, applicationID uuid.UUID, params UpdateVariablesParams) error
 	}
 )
 
@@ -69,4 +72,24 @@ func (s service) Deploy(ctx context.Context, frontend, backend io.Reader, params
 	}
 
 	return response.Data, nil
+}
+
+func (s service) UpdateVariables(ctx context.Context, applicationID uuid.UUID, params UpdateVariablesParams) error {
+	var response struct {
+		Message string `json:"message"`
+	}
+
+	url := fmt.Sprintf("applications/%s/variables", applicationID)
+	param := Params{
+		Method:   "PUT",
+		Path:     url,
+		Body:     params,
+		Response: &response,
+	}
+	err := s.apiClient.Do(ctx, param)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

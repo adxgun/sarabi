@@ -114,7 +114,10 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 }
 
 func (p *proxyComponent) Cleanup(ctx context.Context, result *components.BuilderResult) error {
-	return p.dockerClient.StopAndRemoveContainer(ctx, result.ID)
+	return p.dockerClient.StopAndRemoveContainer(ctx, docker.StopContainerParams{
+		RemoveVolumes: false,
+		ContainerName: result.ID,
+	})
 }
 
 func (p *proxyComponent) writeCaddyInitConfig() error {

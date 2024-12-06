@@ -34,7 +34,7 @@ type Docker interface {
 	PullImage(ctx context.Context, name string) error
 	StartContainerAndWait(ctx context.Context, params StartContainerParams) (*ContainerInfo, error)
 	RestartContainer(ctx context.Context, name string) error
-	StopAndRemoveContainer(ctx context.Context, containerName string) error
+	StopAndRemoveContainer(ctx context.Context, param StopContainerParams) error
 	CopyFileIntoContainer(ctx context.Context, containerName, src, dest string) error
 	ExtractFiles(ctx context.Context, containerName, fileDir string) error
 	ConnectContainer(ctx context.Context, containerName, networkName string) error
@@ -238,14 +238,14 @@ func (d *dockerClient) RestartContainer(ctx context.Context, name string) error 
 	return nil
 }
 
-func (d *dockerClient) StopAndRemoveContainer(ctx context.Context, containerName string) error {
-	err := d.hostClient.ContainerStop(ctx, containerName, container.StopOptions{})
+func (d *dockerClient) StopAndRemoveContainer(ctx context.Context, param StopContainerParams) error {
+	err := d.hostClient.ContainerStop(ctx, param.ContainerName, container.StopOptions{})
 	if err != nil {
 		return err
 	}
 
-	return d.hostClient.ContainerRemove(ctx, containerName, container.RemoveOptions{
-		RemoveVolumes: true,
+	return d.hostClient.ContainerRemove(ctx, param.ContainerName, container.RemoveOptions{
+		RemoveVolumes: param.RemoveVolumes,
 		Force:         true,
 	})
 }

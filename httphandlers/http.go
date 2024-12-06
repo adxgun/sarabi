@@ -120,7 +120,7 @@ func (handler *ApiHandler) UpdateVariables(w http.ResponseWriter, r *http.Reques
 
 	var body struct {
 		Environment string                     `json:"environment"`
-		Secrets     []types.CreateSecretParams `json:"secrets"`
+		Secrets     []types.CreateSecretParams `json:"vars"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -134,7 +134,7 @@ func (handler *ApiHandler) UpdateVariables(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	ok(w, "secrets updated", nil)
+	ok(w, "variable updated", nil)
 }
 
 func (handler *ApiHandler) Rollback(w http.ResponseWriter, r *http.Request) {

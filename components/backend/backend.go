@@ -124,7 +124,10 @@ func (b *backendComponent) Cleanup(ctx context.Context, result *components.Build
 
 	for _, deployment := range result.PreviousActive {
 		for idx := 0; idx < deployment.Instances; idx++ {
-			err := b.dockerClient.StopAndRemoveContainer(ctx, deployment.ContainerName(idx))
+			err := b.dockerClient.StopAndRemoveContainer(ctx, docker.StopContainerParams{
+				RemoveVolumes: true,
+				ContainerName: deployment.ContainerName(idx),
+			})
 			if err != nil {
 				return err
 			}

@@ -6,6 +6,7 @@ import (
 	"sarabi/client/internal/config"
 	"sarabi/client/pkg/cmd/apps"
 	"sarabi/client/pkg/cmd/deploy"
+	"sarabi/client/pkg/cmd/vars"
 )
 
 func New() (*cobra.Command, error) {
@@ -27,5 +28,6 @@ func New() (*cobra.Command, error) {
 
 	cmd.AddCommand(apps.NewAppsCmd(svc))
 	cmd.AddCommand(deploy.NewDeployCmd(svc, cfg))
+	cmd.AddCommand(vars.NewVarsCmd(svc, cfg))
 	return cmd, nil
 }
