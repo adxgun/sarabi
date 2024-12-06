@@ -40,6 +40,10 @@ func Gzip(sourceDir, outputFile string) error {
 		}
 	}
 
+	if err := os.MkdirAll(filepath.Dir(outputFile), 0755); err != nil {
+		return err
+	}
+
 	outFile, err := os.Create(outputFile)
 	if err != nil {
 		return fmt.Errorf("could not create output file: %w", err)

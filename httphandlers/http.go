@@ -60,7 +60,6 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		ApplicationID uuid.UUID `json:"application_id"`
 		Instances     int       `json:"instances"`
 		Environment   string    `json:"environment"`
-		StorageEngine string    `json:"storage_engine"`
 	}
 
 	if err := json.Unmarshal([]byte(r.FormValue("json")), &body); err != nil {
@@ -72,7 +71,6 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		ApplicationID: body.ApplicationID,
 		Instances:     body.Instances,
 		Environment:   body.Environment,
-		StorageEngine: types.StorageEngine(body.StorageEngine),
 	}
 	for _, ff := range r.MultipartForm.File["files"] {
 		if !strings.HasSuffix(ff.Filename, ".tar.gz") {

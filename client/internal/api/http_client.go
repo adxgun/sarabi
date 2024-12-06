@@ -137,6 +137,10 @@ func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params P
 	if resp.StatusCode < 200 || resp.StatusCode > 300 {
 		return c.parseError(responseBody)
 	}
+
+	if err := json.Unmarshal(responseBody, &params.Response); err != nil {
+		return err
+	}
 	return nil
 }
 

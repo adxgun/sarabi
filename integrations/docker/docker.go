@@ -128,7 +128,7 @@ func (d *dockerClient) IsContainerRunning(ctx context.Context, container string)
 		return true, ContainerInfo{ID: result.ID, Name: result.Name}, nil
 	}
 
-	return false, ContainerInfo{}, errors.New("container is not running: " + string(result.State.Error))
+	return false, ContainerInfo{}, nil
 }
 
 func (d *dockerClient) CreateNetwork(ctx context.Context, name string) error {

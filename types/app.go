@@ -57,7 +57,6 @@ type (
 		Backend       io.Reader
 		Instances     int
 		Environment   string
-		StorageEngine StorageEngine
 	}
 
 	CreateDeploymentParams struct {

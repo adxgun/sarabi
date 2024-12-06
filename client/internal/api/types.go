@@ -6,8 +6,17 @@ type (
 	DeployParams struct {
 		Instances     int       `json:"instances"`
 		ApplicationID uuid.UUID `json:"application_id"`
-		Environment   string    `json:"environment"`
-		StorageEngine string    `json:"storage_engine"`
+		Environment   string    `json:"environment" validate:"required"`
+	}
+
+	DeployResponse struct {
+		Identifier string    `json:"identifier"`
+		AccessURL  AccessURL `json:"access_url"`
+	}
+
+	AccessURL struct {
+		Frontend []string `json:"frontend"`
+		Backend  []string `json:"backend"`
 	}
 
 	CreateApplicationParams struct {

@@ -103,6 +103,11 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 	var feDomains []string
 	var beDomains []string
 
+	app, err := m.appService.Get(ctx, param.ApplicationID)
+	if err != nil {
+		return nil, err
+	}
+
 	identifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
 	if err != nil {
 		return nil, err
@@ -125,12 +130,12 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 			return nil, errors2.Wrap(err, "failed to create database deployment")
 		}
 
-		// TODO: get storage engine from application instead of deployment
-		// TODO: and run db component for each storage engine
-		dbComponent := databasecomponent.New(m.dockerClient, m.appService,
-			m.secretService, databasecomponent.NewProvider(param.StorageEngine), m.caddyClient)
-		if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
-			return nil, errors2.Wrap(err, "failed to run database component")
+		for _, se := range app.StorageEngines {
+			dbComponent := databasecomponent.New(m.dockerClient, m.appService,
+				m.secretService, databasecomponent.NewProvider(se), m.caddyClient)
+			if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
+				return nil, errors2.Wrap(err, "failed to run database component")
+			}
 		}
 
 		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval); err != nil {

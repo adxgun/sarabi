@@ -82,7 +82,7 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	}
 
 	volumeMounts := []string{
-		fmt.Sprintf("%s:%s", deployment.DatabaseMountVolume(), d.dbProvider.DataPath()),
+		fmt.Sprintf("%s:%s", d.dbProvider.DataPath(), deployment.DatabaseMountVolume()),
 		storage.BackupTempDir + ":" + storage.BackupTempDir,
 	}
 	tcpPort, _ := nat.NewPort("tcp", d.dbProvider.Port())
