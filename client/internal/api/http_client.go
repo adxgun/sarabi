@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 )
 
 type (
@@ -17,10 +18,11 @@ type (
 	}
 
 	Params struct {
-		Method   string
-		Path     string
-		Body     interface{}
-		Response interface{}
+		Method      string
+		Path        string
+		Body        interface{}
+		Response    interface{}
+		QueryParams map[string]string
 	}
 
 	Client interface {
@@ -42,8 +44,20 @@ func NewClient() (Client, error) {
 }
 
 func (c client) Do(ctx context.Context, param Params) error {
-	requestUrl := c.baseUrl + param.Path
-	req, err := http.NewRequestWithContext(ctx, param.Method, requestUrl, nil)
+	requestUrl, err := url.Parse(c.baseUrl + param.Path)
+	if err != nil {
+		return err
+	}
+
+	if len(param.QueryParams) > 0 {
+		values := url.Values{}
+		for k, v := range param.QueryParams {
+			values.Add(k, v)
+		}
+		requestUrl.RawQuery = values.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, param.Method, requestUrl.String(), nil)
 	if err != nil {
 		return err
 	}

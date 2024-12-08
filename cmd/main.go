@@ -11,16 +11,16 @@ import (
 	"os/exec"
 	"os/signal"
 	"sarabi"
-	"sarabi/bundler"
-	proxycomponent "sarabi/components/proxy"
-	"sarabi/database"
-	"sarabi/httphandlers"
-	"sarabi/integrations/caddy"
-	dockerclient "sarabi/integrations/docker"
+	"sarabi/internal/bundler"
+	proxycomponent "sarabi/internal/components/proxy"
+	"sarabi/internal/database"
+	"sarabi/internal/httphandlers"
+	"sarabi/internal/integrations/caddy"
+	dockerclient "sarabi/internal/integrations/docker"
+	"sarabi/internal/manager"
+	service2 "sarabi/internal/service"
+	"sarabi/internal/storage"
 	"sarabi/logger"
-	"sarabi/manager"
-	"sarabi/service"
-	"sarabi/storage"
 	"syscall"
 	"time"
 )
@@ -116,12 +116,12 @@ func setup() (*http.Server, error, func() error) {
 	backupRepository := database.NewBackupRepository(db)
 
 	encryptor := sarabi.NewEncryptor()
-	appService := service.NewApplicationService(appRepo, deploymentRepo)
-	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
+	appService := service2.NewApplicationService(appRepo, deploymentRepo)
+	secretService := service2.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
 	caddyClient := caddy.NewCaddyClient()
-	domainService := service.NewDomainService(caddyClient, domainRepo)
+	domainService := service2.NewDomainService(caddyClient, domainRepo)
 
-	backupSvc, err := service.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
+	backupSvc, err := service2.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
 	if err != nil {
 		return nil, err, nil
 	}

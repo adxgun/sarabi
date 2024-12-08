@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/config"
+	"sarabi/client/pkg/cmd/vars/list"
 	"sarabi/client/pkg/cmd/vars/update"
 )
 
@@ -18,5 +19,6 @@ func NewVarsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	}
 
 	cmd.AddCommand(update.NewUpdateVarsCmd(svc, cfg))
+	cmd.AddCommand(list.NewListVarsCmd(svc, cfg))
 	return cmd
 }

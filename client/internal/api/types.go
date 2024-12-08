@@ -1,6 +1,9 @@
 package api
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+	"time"
+)
 
 type (
 	DeployParams struct {
@@ -26,6 +29,12 @@ type (
 		Key   string `json:"key"`
 		Value string `json:"value"`
 	}
+
+	AddDomainParam struct {
+		FQDN        string `json:"name" validate:"required,fqdn"`
+		Instance    string `json:"instance_type" validate:"required"`
+		Environment string `json:"environment" validate:"required"`
+	}
 )
 
 type (
@@ -34,6 +43,7 @@ type (
 		Name           string    `json:"name"`
 		Domain         string    `json:"domain"`
 		StorageEngines []string  `json:"storage_engines"`
+		CreatedAt      time.Time `json:"created_at"`
 	}
 
 	DeployResponse struct {
@@ -44,5 +54,12 @@ type (
 	AccessURL struct {
 		Frontend []string `json:"frontend"`
 		Backend  []string `json:"backend"`
+	}
+
+	Var struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Value       string `json:"value"`
+		Environment string `json:"environment"`
 	}
 )

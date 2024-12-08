@@ -16,6 +16,11 @@ type (
 		CreateApplication(ctx context.Context, params CreateApplicationParams) (Application, error)
 		Deploy(ctx context.Context, frontend, backend io.Reader, params DeployParams) (DeployResponse, error)
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, params UpdateVariablesParams) error
+		ListApplications(ctx context.Context) ([]Application, error)
+		Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error
+		ListVariables(ctx context.Context, applicationID uuid.UUID, environment string) ([]Var, error)
+		AddDomain(ctx context.Context, applicationID uuid.UUID, param AddDomainParam) error
+		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
 	}
 )
 
@@ -86,10 +91,94 @@ func (s service) UpdateVariables(ctx context.Context, applicationID uuid.UUID, p
 		Body:     params,
 		Response: &response,
 	}
-	err := s.apiClient.Do(ctx, param)
-	if err != nil {
-		return err
+	return s.apiClient.Do(ctx, param)
+}
+
+func (s service) ListApplications(ctx context.Context) ([]Application, error) {
+	var response struct {
+		Data []Application `json:"data"`
 	}
 
-	return nil
+	err := s.apiClient.Do(ctx, Params{
+		Method:   "GET",
+		Path:     "applications",
+		Response: &response,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response.Data, nil
+}
+
+func (s service) Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error {
+	type body struct {
+		Environment string `json:"environment"`
+	}
+
+	var response struct {
+		Message string `json:"message"`
+	}
+
+	b := body{Environment: environment}
+	param := Params{
+		Method:   "POST",
+		Path:     fmt.Sprintf("applications/%s/destroy", applicationID),
+		Body:     b,
+		Response: &response,
+	}
+	return s.apiClient.Do(ctx, param)
+}
+
+func (s service) ListVariables(ctx context.Context, applicationID uuid.UUID, environment string) ([]Var, error) {
+	var response struct {
+		Data []Var `json:"data"`
+	}
+
+	u := fmt.Sprintf("applications/%s/variables", applicationID)
+	param := Params{
+		Method:   "GET",
+		Path:     u,
+		Response: &response,
+		QueryParams: map[string]string{
+			"environment": environment,
+		},
+	}
+
+	err := s.apiClient.Do(ctx, param)
+	if err != nil {
+		return nil, err
+	}
+	return response.Data, nil
+}
+
+func (s service) AddDomain(ctx context.Context, applicationID uuid.UUID, param AddDomainParam) error {
+	var response struct {
+		Message string `json:"message"`
+	}
+	params := Params{
+		Method:   "PUT",
+		Path:     fmt.Sprintf("applications/%s/domains", applicationID),
+		Body:     param,
+		Response: &response,
+	}
+	return s.apiClient.Do(ctx, params)
+}
+
+func (s service) RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error {
+	var response struct {
+		Message string `json:"message"`
+	}
+
+	type body struct {
+		Name string `json:"name"`
+	}
+	b := body{Name: name}
+
+	params := Params{
+		Method:   "DELETE",
+		Path:     fmt.Sprintf("applications/%s/domains", applicationID),
+		Body:     b,
+		Response: &response,
+	}
+	return s.apiClient.Do(ctx, params)
 }
