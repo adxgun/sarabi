@@ -11,7 +11,7 @@ import (
 	"io"
 	"net/http"
 	"sarabi/internal/manager"
-	types2 "sarabi/internal/types"
+	"sarabi/internal/types"
 	"sarabi/logger"
 	"strings"
 	"time"
@@ -32,7 +32,7 @@ func NewApiHandler(mn manager.Manager) *ApiHandler {
 }
 
 func (handler *ApiHandler) CreateApplication(w http.ResponseWriter, r *http.Request) {
-	var params types2.CreateApplicationParams
+	var params types.CreateApplicationParams
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
 		badRequest(w, err)
 		return
@@ -67,7 +67,7 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	param := &types2.DeployParams{
+	param := &types.DeployParams{
 		ApplicationID: body.ApplicationID,
 		Instances:     body.Instances,
 		Environment:   body.Environment,
@@ -119,8 +119,8 @@ func (handler *ApiHandler) UpdateVariables(w http.ResponseWriter, r *http.Reques
 	}
 
 	var body struct {
-		Environment string                      `json:"environment"`
-		Secrets     []types2.CreateSecretParams `json:"vars"`
+		Environment string                     `json:"environment"`
+		Secrets     []types.CreateSecretParams `json:"vars"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -198,7 +198,7 @@ func (handler *ApiHandler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := &types2.AddDomainParams{}
+	params := &types.AddDomainParams{}
 	if err := json.NewDecoder(r.Body).Decode(params); err != nil {
 		badRequest(w, err)
 		return
@@ -239,7 +239,7 @@ func (handler *ApiHandler) RemoveDomain(w http.ResponseWriter, r *http.Request) 
 }
 
 func (handler *ApiHandler) AddCredentials(w http.ResponseWriter, r *http.Request) {
-	params := types2.AddCredentialsParams{}
+	params := types.AddCredentialsParams{}
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
 		badRequest(w, err)
 		return

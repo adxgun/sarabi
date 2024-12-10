@@ -112,7 +112,7 @@ func setup() (*http.Server, error, func() error) {
 	secretRepo := database.NewSecretRepository(db)
 	domainRepo := database.NewDomainRepository(db)
 	backupSettingsRepo := database.NewBackupSettingsRepository(db)
-	credentialRepo := database.NewCredentialRepository(db)
+	credentialRepo := database.NewServerConfigRepository(db)
 	backupRepository := database.NewBackupRepository(db)
 
 	encryptor := sarabi.NewEncryptor()

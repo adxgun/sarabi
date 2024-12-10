@@ -2,17 +2,20 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/google/uuid"
 	errors2 "github.com/pkg/errors"
+	"github.com/robfig/cron/v3"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
-	backup2 "sarabi/internal/backup"
+	"sarabi/internal/backup"
 	"sarabi/internal/database"
 	"sarabi/internal/integrations/docker"
-	storage2 "sarabi/internal/storage"
-	types2 "sarabi/internal/types"
+	"sarabi/internal/storage"
+	"sarabi/internal/types"
 	"sarabi/logger"
 	"strings"
 	"time"
@@ -21,9 +24,9 @@ import (
 type (
 	BackupService interface {
 		Run(ctx context.Context) error
-		CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, runInterval time.Duration) error
-		Download(ctx context.Context, backupID uuid.UUID) (*types2.File, error)
-		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types2.Backup, error)
+		CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error
+		Download(ctx context.Context, backupID uuid.UUID) (*types.File, error)
+		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 	}
 
 	backupService struct {
@@ -32,8 +35,7 @@ type (
 		secretService            SecretService
 		backupSettingsRepository database.BackupSettingsRepository
 		backupRepository         database.BackupRepository
-		sscheduler               gocron.Scheduler
-		scheduler                backup2.Scheduler
+		scheduler                gocron.Scheduler
 		started                  bool
 	}
 )
@@ -50,8 +52,7 @@ func NewBackupService(dc docker.Docker, service ApplicationService,
 		applicationService:       service,
 		secretService:            ss,
 		backupSettingsRepository: backupSettings,
-		scheduler:                backup2.NewScheduler(),
-		sscheduler:               scheduler,
+		scheduler:                scheduler,
 		backupRepository:         repository,
 	}, nil
 }
@@ -70,7 +71,7 @@ func (b backupService) Run(ctx context.Context) error {
 	return nil
 }
 
-func (b backupService) run(ctx context.Context, settings *types2.BackupSettings) error {
+func (b backupService) run(ctx context.Context, settings *types.BackupSettings) error {
 	application, err := b.applicationService.Get(ctx, settings.ApplicationID)
 	if err != nil {
 		return err
@@ -81,12 +82,12 @@ func (b backupService) run(ctx context.Context, settings *types2.BackupSettings)
 		return err
 	}
 
-	dbVars := lo.Filter(allAppVars, func(item *types2.Secret, index int) bool {
-		return types2.InstanceType(item.InstanceType) == types2.InstanceTypeDatabase &&
+	dbVars := lo.Filter(allAppVars, func(item *types.Secret, index int) bool {
+		return types.InstanceType(item.InstanceType) == types.InstanceTypeDatabase &&
 			item.Environment == settings.Environment
 	})
 	storageCred, _ := b.findStorageCredential(ctx, application)
-	param := backup2.ExecuteParams{
+	param := backup.ExecuteParams{
 		Environment:       settings.Environment,
 		DatabaseVars:      dbVars,
 		StorageCredential: storageCred,
@@ -94,14 +95,14 @@ func (b backupService) run(ctx context.Context, settings *types2.BackupSettings)
 	}
 
 	for _, se := range application.StorageEngines {
-		var bk backup2.Executor
+		var bk backup.Executor
 		switch se {
-		case types2.StorageEnginePostgres:
-			bk = backup2.NewPostgres(b.dockerClient)
-		case types2.StorageEngineMysql:
-			bk = backup2.NewMysql(b.dockerClient)
-		case types2.StorageEngineMongo:
-			bk = backup2.NewMongo(b.dockerClient)
+		case types.StorageEnginePostgres:
+			bk = backup.NewPostgres(b.dockerClient)
+		case types.StorageEngineMysql:
+			bk = backup.NewMysql(b.dockerClient)
+		case types.StorageEngineMongo:
+			bk = backup.NewMongo(b.dockerClient)
 		default:
 			return nil
 		}
@@ -118,7 +119,7 @@ func (b backupService) run(ctx context.Context, settings *types2.BackupSettings)
 				zap.String("engine", string(se)),
 				zap.String("ts", time.Now().String()))
 
-			newBackup := &types2.Backup{
+			newBackup := &types.Backup{
 				ID:            uuid.New(),
 				ApplicationID: application.ID,
 				Environment:   settings.Environment,
@@ -136,7 +137,7 @@ func (b backupService) run(ctx context.Context, settings *types2.BackupSettings)
 	return nil
 }
 
-func (b backupService) runBG(ctx context.Context, settings *types2.BackupSettings) error {
+func (b backupService) runBG(ctx context.Context, settings *types.BackupSettings) error {
 	go func() {
 		if err := b.run(ctx, settings); err != nil {
 			logger.Info("run failed", zap.Error(err))
@@ -145,10 +146,9 @@ func (b backupService) runBG(ctx context.Context, settings *types2.BackupSetting
 	return nil
 }
 
-func (b backupService) runScheduler(ctx context.Context, bc *types2.BackupSettings) error {
-
-	/*job, err := b.scheduler.NewJob(
-		gocron.DurationJob(bc.BackupInterval),
+func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSettings) error {
+	job, err := b.scheduler.NewJob(
+		gocron.CronJob(bc.CronExpression, false),
 		gocron.NewTask(b.runBG, ctx, bc))
 	if err != nil {
 		return err
@@ -156,18 +156,7 @@ func (b backupService) runScheduler(ctx context.Context, bc *types2.BackupSettin
 
 	logger.Info("backup job queued",
 		zap.String("Name", job.Name()),
-		zap.String("environment", bc.Environment))*/
-	j := backup2.Job{
-		Interval: "* * * * *",
-		Task:     b.run,
-		Ctx:      ctx,
-		Setting:  bc,
-		Name:     bc.ID.String(),
-	}
-	if err := b.scheduler.Schedule(j); err != nil {
-		return err
-	}
-
+		zap.String("environment", bc.Environment))
 	if !b.started {
 		b.scheduler.Start()
 	}
@@ -175,24 +164,28 @@ func (b backupService) runScheduler(ctx context.Context, bc *types2.BackupSettin
 	return nil
 }
 
-func (b backupService) CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, runInterval time.Duration) error {
+func (b backupService) CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error {
+	if err := b.parseExpression(cronExpression); err != nil {
+		return err
+	}
+
 	settings, err := b.backupSettingsRepository.FindByApplicationID(ctx, applicationID)
 	if err != nil {
 		return errors2.Wrap(err, "failed to fetch backup settings")
 	}
 
-	exists := lo.Filter(settings, func(item *types2.BackupSettings, index int) bool {
+	exists := lo.Filter(settings, func(item *types.BackupSettings, index int) bool {
 		return strings.ToLower(item.Environment) == strings.ToLower(environment)
 	})
 	if len(exists) > 0 {
 		return nil
 	}
 
-	backupSettings := &types2.BackupSettings{
+	backupSettings := &types.BackupSettings{
 		ID:             uuid.New(),
 		ApplicationID:  applicationID,
 		Environment:    environment,
-		BackupInterval: runInterval,
+		CronExpression: cronExpression,
 		CreatedAt:      time.Now(),
 	}
 	err = b.backupSettingsRepository.Save(ctx, backupSettings)
@@ -203,22 +196,22 @@ func (b backupService) CreateBackupSettings(ctx context.Context, applicationID u
 	return b.runScheduler(ctx, backupSettings)
 }
 
-func (b backupService) Download(ctx context.Context, backupID uuid.UUID) (*types2.File, error) {
+func (b backupService) Download(ctx context.Context, backupID uuid.UUID) (*types.File, error) {
 	bk, err := b.backupRepository.FindByID(ctx, backupID)
 	if err != nil {
 		return nil, err
 	}
 
 	cred, crederr := b.findStorageCredential(ctx, bk.Application)
-	var st storage2.Storage
-	switch storage2.Type(bk.StorageType) {
-	case storage2.TypeFS:
-		st = storage2.NewFileStorage()
-	case storage2.TypeS3:
+	var st storage.Storage
+	switch storage.Type(bk.StorageType) {
+	case storage.TypeFS:
+		st = storage.NewFileStorage()
+	case storage.TypeS3:
 		if cred == nil {
 			return nil, errors2.Wrap(crederr, "failed to find object storage credential")
 		}
-		st, err = storage2.NewS3Storage(*cred)
+		st, err = storage.NewObjectStorage(*cred)
 		if err != nil {
 			return nil, err
 		}
@@ -229,38 +222,38 @@ func (b backupService) Download(ctx context.Context, backupID uuid.UUID) (*types
 	return st.Get(ctx, bk.Location)
 }
 
-func (b backupService) ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types2.Backup, error) {
+func (b backupService) ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error) {
 	return b.backupRepository.FindByApplicationID(ctx, applicationID)
 }
 
-func (b backupService) findStorageCredential(ctx context.Context, application *types2.Application) (*types2.StorageCredentials, error) {
-	credentials, err := b.secretService.FindApplicationCredentials(ctx, application.ID, types2.CredentialProviderS3)
+func (b backupService) findStorageCredential(ctx context.Context, application *types.Application) (*types.StorageCredentials, error) {
+	credentials, err := b.secretService.FindApplicationServerConfigs(ctx, application.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	keyId, err := FindCredential("ACCESS_KEY", credentials)
-	if err != nil {
-		return nil, err
-	}
-	secretAccessKey, err := FindCredential("SECRET_KEY", credentials)
-	if err != nil {
-		return nil, err
-	}
-	endpoint, err := FindCredential("ENDPOINT", credentials)
-	if err != nil {
-		return nil, err
-	}
-	region, _ := FindCredential("REGION", credentials)
-	regionStr := ""
-	if region != nil {
-		regionStr = region.Value
+	objectStorageConfig := lo.Filter(credentials, func(item *types.ServerConfig, index int) bool {
+		return item.Name == types.ServerConfigObjectStorage
+	})
+	if len(objectStorageConfig) == 0 {
+		return nil, errors.New("no object storage configured")
 	}
 
-	return &types2.StorageCredentials{
-		Endpoint:  endpoint.Value,
-		KeyId:     keyId.Value,
-		SecretKey: secretAccessKey.Value,
-		Region:    regionStr,
-	}, nil
+	value := objectStorageConfig[0]
+	cred := &types.StorageCredentials{}
+	if err := json.Unmarshal([]byte(value.Value), cred); err != nil {
+		return nil, err
+	}
+	return cred, nil
+}
+
+func (b backupService) parseExpression(cronExpression string) error {
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	_, err := parser.Parse(cronExpression)
+	if err != nil {
+
+		return fmt.Errorf("invalid cron expression: %w", err)
+	}
+
+	return nil
 }

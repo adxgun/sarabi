@@ -11,6 +11,7 @@ type (
 	Storage interface {
 		Save(ctx context.Context, location string, f types.File) error
 		Get(ctx context.Context, location string) (*types.File, error)
+		Ping(ctx context.Context) error
 	}
 )
 

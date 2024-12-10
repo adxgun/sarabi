@@ -4,34 +4,34 @@ import (
 	"context"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	types2 "sarabi/internal/types"
+	types "sarabi/internal/types"
 )
 
 const (
 	backupBucket = "backups"
 )
 
-type s3Storage struct {
+type objectStorage struct {
 	client *minio.Client
 	region string
 }
 
-func NewS3Storage(cred types2.StorageCredentials) (Storage, error) {
+func NewObjectStorage(cred types.StorageCredentials) (Storage, error) {
 	mn, err := minio.New(cred.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cred.KeyId, cred.SecretKey, ""),
+		Creds:  credentials.NewStaticV4(cred.AccessKeyID, cred.SecretKey, ""),
 		Secure: false,
 		Region: cred.Region,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &s3Storage{
+	return &objectStorage{
 		region: cred.Region,
 		client: mn,
 	}, nil
 }
 
-func (s s3Storage) Save(ctx context.Context, location string, file types2.File) error {
+func (s objectStorage) Save(ctx context.Context, location string, file types.File) error {
 	if err := s.makeBucket(ctx); err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func (s s3Storage) Save(ctx context.Context, location string, file types2.File) 
 	return nil
 }
 
-func (s s3Storage) Get(ctx context.Context, location string) (*types2.File, error) {
+func (s objectStorage) Get(ctx context.Context, location string) (*types.File, error) {
 	r, err := s.client.GetObject(ctx, backupBucket, location, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, err
@@ -55,13 +55,13 @@ func (s s3Storage) Get(ctx context.Context, location string) (*types2.File, erro
 		return nil, err
 	}
 
-	return &types2.File{
+	return &types.File{
 		Content: r,
-		Stat:    types2.FileStat{Size: stat.Size, Name: stat.Key},
+		Stat:    types.FileStat{Size: stat.Size, Name: stat.Key},
 	}, nil
 }
 
-func (s s3Storage) makeBucket(ctx context.Context) error {
+func (s objectStorage) makeBucket(ctx context.Context) error {
 	exists, err := s.client.BucketExists(ctx, backupBucket)
 	if err != nil {
 		return err
@@ -74,4 +74,12 @@ func (s s3Storage) makeBucket(ctx context.Context) error {
 	return s.client.MakeBucket(ctx, backupBucket, minio.MakeBucketOptions{
 		Region: s.region,
 	})
+}
+
+func (s objectStorage) Ping(ctx context.Context) error {
+	_, err := s.client.ListBuckets(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
 }

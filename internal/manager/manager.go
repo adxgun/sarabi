@@ -24,11 +24,10 @@ import (
 	"sarabi/logger"
 	"sort"
 	"strings"
-	"time"
 )
 
 const (
-	defaultBackupInterval = time.Minute * 10 // 30 mins
+	defaultBackupInterval = "*/30 * * * *" // 30 mins
 )
 
 type (
@@ -42,7 +41,7 @@ type (
 		Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error)
 		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
-		AddCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.AddCredentialsResponse, error)
+		AddCredentials(ctx context.Context, params types.AddCredentialsParams) (*types.ServerConfigResponse, error)
 		DownloadBackup(ctx context.Context, backupID uuid.UUID) (*types.File, error)
 		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error)
@@ -528,19 +527,36 @@ func (m *manager) RemoveDomain(ctx context.Context, applicationID uuid.UUID, nam
 	return nil
 }
 
-func (m *manager) AddCredentials(ctx context.Context, params types.AddCredentialsParams) ([]*types.AddCredentialsResponse, error) {
-	result, err := m.secretService.CreateCredentials(ctx, params)
+func (m *manager) AddCredentials(ctx context.Context, params types.AddCredentialsParams) (*types.ServerConfigResponse, error) {
+	cred := types.StorageCredentials{
+		Endpoint:    params.Value.Endpoint,
+		AccessKeyID: params.Value.AccessKeyID,
+		SecretKey:   params.Value.SecretKey,
+		Region:      params.Value.Region,
+	}
+
+	s, err := storage.NewObjectStorage(cred)
+	if err != nil {
+		return nil, errors2.Wrap(err, "failed to validate object storage credentials")
+	}
+
+	if err := s.Ping(ctx); err != nil {
+		return nil, errors2.Wrap(err, "failed to validate object storage credentials")
+	}
+
+	addConfigParams := types.CreateServerConfigParams{
+		ApplicationID: params.ApplicationID,
+		Name:          types.ServerConfigObjectStorage,
+		Provider:      params.Provider,
+		Value:         params.Value,
+	}
+
+	result, err := m.secretService.CreateServerConfig(ctx, addConfigParams)
 	if err != nil {
 		return nil, err
 	}
 
-	return lo.Map(result, func(item *types.Credential, index int) *types.AddCredentialsResponse {
-		return &types.AddCredentialsResponse{
-			ID:       item.ID,
-			Provider: item.Provider,
-			Key:      item.Name,
-		}
-	}), nil
+	return result, err
 }
 
 func (m *manager) DownloadBackup(ctx context.Context, backupID uuid.UUID) (*types.File, error) {

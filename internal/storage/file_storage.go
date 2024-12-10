@@ -67,3 +67,7 @@ func (f fileStorage) Get(ctx context.Context, location string) (*types.File, err
 		Stat:    types.FileStat{Size: stat.Size(), Name: stat.Name()},
 	}, nil
 }
+
+func (f fileStorage) Ping(ctx context.Context) error {
+	return nil
+}

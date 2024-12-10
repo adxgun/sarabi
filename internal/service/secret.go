@@ -2,23 +2,25 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/samber/lo"
+	"gorm.io/gorm"
 	"sarabi"
 	"sarabi/internal/database"
-	types2 "sarabi/internal/types"
+	"sarabi/internal/types"
 	"time"
 )
 
 type SecretService interface {
-	Create(ctx context.Context, params types2.CreateSecretParams) (*types2.Secret, error)
-	CreateAll(ctx context.Context, params ...types2.CreateSecretParams) ([]*types2.Secret, error)
-	FindAll(ctx context.Context, applicationID uuid.UUID) ([]*types2.Secret, error)
-	CreateDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID, secrets []*types2.Secret) error
-	FindDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) ([]*types2.Secret, error)
-	CreateCredentials(ctx context.Context, params types2.AddCredentialsParams) ([]*types2.Credential, error)
-	FindApplicationCredentials(ctx context.Context, applicationID uuid.UUID, provider string) ([]*types2.Credential, error)
+	Create(ctx context.Context, params types.CreateSecretParams) (*types.Secret, error)
+	CreateAll(ctx context.Context, params ...types.CreateSecretParams) ([]*types.Secret, error)
+	FindAll(ctx context.Context, applicationID uuid.UUID) ([]*types.Secret, error)
+	CreateDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID, secrets []*types.Secret) error
+	FindDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) ([]*types.Secret, error)
+	CreateServerConfig(ctx context.Context, params types.CreateServerConfigParams) (*types.ServerConfigResponse, error)
+	FindApplicationServerConfigs(ctx context.Context, applicationID uuid.UUID) ([]*types.ServerConfig, error)
 	DeleteDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) error
 }
 
@@ -26,20 +28,20 @@ type secretService struct {
 	encryptor                  sarabi.Encryptor
 	repository                 database.SecretRepository
 	deploymentSecretRepository database.DeploymentSecretRepository
-	credentialRepository       database.CredentialRepository
+	serverConfigRepository     database.ServerConfigRepository
 }
 
 func NewSecretService(enc sarabi.Encryptor, repo database.SecretRepository,
-	depSecretRepo database.DeploymentSecretRepository, credentialRepo database.CredentialRepository) SecretService {
+	depSecretRepo database.DeploymentSecretRepository, serverConfigRepository database.ServerConfigRepository) SecretService {
 	return &secretService{
 		encryptor:                  enc,
 		repository:                 repo,
 		deploymentSecretRepository: depSecretRepo,
-		credentialRepository:       credentialRepo,
+		serverConfigRepository:     serverConfigRepository,
 	}
 }
 
-func (s *secretService) Create(ctx context.Context, params types2.CreateSecretParams) (*types2.Secret, error) {
+func (s *secretService) Create(ctx context.Context, params types.CreateSecretParams) (*types.Secret, error) {
 	encryptedValue, err := s.encryptor.Encrypt(params.Value)
 	if err != nil {
 		return nil, err
@@ -54,7 +56,7 @@ func (s *secretService) Create(ctx context.Context, params types2.CreateSecretPa
 		return sc, nil
 	}
 
-	sc := &types2.Secret{
+	sc := &types.Secret{
 		ID:            uuid.New(),
 		ApplicationID: params.ApplicationID,
 		Name:          params.Key,
@@ -70,8 +72,8 @@ func (s *secretService) Create(ctx context.Context, params types2.CreateSecretPa
 	return sc, nil
 }
 
-func (s *secretService) CreateAll(ctx context.Context, values ...types2.CreateSecretParams) ([]*types2.Secret, error) {
-	result := make([]*types2.Secret, 0, len(values))
+func (s *secretService) CreateAll(ctx context.Context, values ...types.CreateSecretParams) ([]*types.Secret, error) {
+	result := make([]*types.Secret, 0, len(values))
 	for _, param := range values {
 		r, err := s.Create(ctx, param)
 		if err != nil {
@@ -82,7 +84,7 @@ func (s *secretService) CreateAll(ctx context.Context, values ...types2.CreateSe
 	return result, nil
 }
 
-func (s *secretService) FindAll(ctx context.Context, applicationID uuid.UUID) ([]*types2.Secret, error) {
+func (s *secretService) FindAll(ctx context.Context, applicationID uuid.UUID) ([]*types.Secret, error) {
 	secrets, err := s.repository.FindAll(ctx, applicationID)
 	if err != nil {
 		return nil, err
@@ -98,10 +100,10 @@ func (s *secretService) FindAll(ctx context.Context, applicationID uuid.UUID) ([
 	return secrets, nil
 }
 
-func (s *secretService) CreateDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID, secrets []*types2.Secret) error {
-	values := make([]*types2.DeploymentSecret, 0, len(secrets))
+func (s *secretService) CreateDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID, secrets []*types.Secret) error {
+	values := make([]*types.DeploymentSecret, 0, len(secrets))
 	for _, ss := range secrets {
-		values = append(values, &types2.DeploymentSecret{
+		values = append(values, &types.DeploymentSecret{
 			ID:           uuid.New(),
 			DeploymentID: deploymentID,
 			SecretID:     ss.ID,
@@ -110,19 +112,19 @@ func (s *secretService) CreateDeploymentSecrets(ctx context.Context, deploymentI
 	return s.deploymentSecretRepository.SaveAll(ctx, values)
 }
 
-func (s *secretService) FindDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) ([]*types2.Secret, error) {
+func (s *secretService) FindDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) ([]*types.Secret, error) {
 	values, err := s.deploymentSecretRepository.FindAll(ctx, deploymentID)
 	if err != nil {
 		return nil, err
 	}
-	secrets := make([]*types2.Secret, 0, len(values))
+	secrets := make([]*types.Secret, 0, len(values))
 	for _, v := range values {
 		decrypted, err := s.encryptor.Decrypt(v.Secret.Value)
 		if err != nil {
 			return nil, err
 		}
 
-		secrets = append(secrets, &types2.Secret{
+		secrets = append(secrets, &types.Secret{
 			ID:            v.ID,
 			ApplicationID: v.Secret.ApplicationID,
 			Name:          v.Secret.Name,
@@ -134,49 +136,50 @@ func (s *secretService) FindDeploymentSecrets(ctx context.Context, deploymentID 
 	return secrets, nil
 }
 
-func (s *secretService) CreateCredentials(ctx context.Context, params types2.AddCredentialsParams) ([]*types2.Credential, error) {
-	result := make([]*types2.Credential, 0)
-	for _, v := range params.Values {
-		credValue, err := s.encryptor.Encrypt(v.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		cred, err := s.credentialRepository.FindByName(ctx, params.ApplicationID, params.Provider, v.Key)
-		if err == nil && cred.ID != uuid.Nil {
-			if err := s.credentialRepository.UpdateCredentialValue(ctx, cred.ID, credValue); err != nil {
-				return nil, err
-			}
-		} else {
-			cred = &types2.Credential{
-				ID:            uuid.New(),
-				ApplicationID: params.ApplicationID,
-				Provider:      params.Provider,
-				Name:          v.Key,
-				Value:         credValue,
-				CreatedAt:     time.Now(),
-			}
-			if err := s.credentialRepository.Save(ctx, cred); err != nil {
-				return nil, err
-			}
-		}
-		result = append(result, cred)
-	}
-	return result, nil
-}
-
-func (s *secretService) FindApplicationCredentials(ctx context.Context, applicationID uuid.UUID, provider string) ([]*types2.Credential, error) {
-	all, err := s.credentialRepository.FindByApplicationID(ctx, applicationID)
+func (s *secretService) CreateServerConfig(ctx context.Context, params types.CreateServerConfigParams) (*types.ServerConfigResponse, error) {
+	serializedValue, err := json.Marshal(params.Value)
 	if err != nil {
 		return nil, err
 	}
 
-	credsByProvider := lo.Filter(all, func(item *types2.Credential, index int) bool {
-		return item.Provider == provider
-	})
+	encrypted, err := s.encryptor.Encrypt(string(serializedValue))
+	if err != nil {
+		return nil, err
+	}
 
-	result := make([]*types2.Credential, 0, len(credsByProvider))
-	for _, next := range credsByProvider {
+	existing, err := s.serverConfigRepository.FindByName(ctx, params.ApplicationID, params.Provider, params.Name)
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+		err = s.serverConfigRepository.UpdateServerConfigValue(ctx, existing.ID, encrypted)
+		if err != nil {
+			return nil, err
+		}
+		return &types.ServerConfigResponse{ID: existing.ID}, nil
+	} else if err == nil {
+		sConfig := &types.ServerConfig{
+			ApplicationID: params.ApplicationID,
+			Provider:      params.Provider,
+			Name:          params.Name,
+			Value:         encrypted,
+			CreatedAt:     time.Now(),
+		}
+		err = s.serverConfigRepository.Save(ctx, sConfig)
+		if err != nil {
+			return nil, err
+		}
+		return &types.ServerConfigResponse{ID: sConfig.ID}, nil
+	} else {
+		return nil, err
+	}
+}
+
+func (s *secretService) FindApplicationServerConfigs(ctx context.Context, applicationID uuid.UUID) ([]*types.ServerConfig, error) {
+	all, err := s.serverConfigRepository.FindByApplicationID(ctx, applicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*types.ServerConfig, 0, len(all))
+	for _, next := range all {
 		decryptedValue, err := s.encryptor.Decrypt(next.Value)
 		if err != nil {
 			return nil, err
@@ -201,7 +204,7 @@ func (s *secretService) DeleteDeploymentSecrets(ctx context.Context, deploymentI
 	return err
 }
 
-func FindSecret(name string, secrets []*types2.Secret) (*types2.Secret, error) {
+func FindSecret(name string, secrets []*types.Secret) (*types.Secret, error) {
 	for _, next := range secrets {
 		if next.Name == name {
 			return next, nil
@@ -210,7 +213,7 @@ func FindSecret(name string, secrets []*types2.Secret) (*types2.Secret, error) {
 	return nil, fmt.Errorf("secret: %s was not found", name)
 }
 
-func FindCredential(name string, creds []*types2.Credential) (*types2.Credential, error) {
+func FindCredential(name string, creds []*types.ServerConfig) (*types.ServerConfig, error) {
 	for _, next := range creds {
 		if next.Name == name {
 			return next, nil

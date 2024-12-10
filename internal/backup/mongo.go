@@ -44,7 +44,7 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 		st = storage2.NewFileStorage()
 		stType = storage2.TypeFS
 	} else {
-		st, err = storage2.NewS3Storage(*params.StorageCredential)
+		st, err = storage2.NewObjectStorage(*params.StorageCredential)
 		if err != nil {
 			return ExecuteResponse{}, errors.Wrap(err, "invalid object storage credential")
 		}

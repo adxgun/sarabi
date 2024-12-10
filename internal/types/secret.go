@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	CredentialProviderS3 = "s3"
+	ServerConfigObjectStorage = "object_storage"
 )
 
 type (
@@ -31,7 +31,7 @@ type (
 		Secret       Secret     `gorm:"foreignKey:SecretID"`
 	}
 
-	Credential struct {
+	ServerConfig struct {
 		ID            uuid.UUID `gorm:"primaryKey"`
 		ApplicationID uuid.UUID `gorm:"not null"`
 		Provider      string    `json:"provider"`
@@ -41,12 +41,16 @@ type (
 	}
 
 	AddCredentialsParams struct {
-		ApplicationID uuid.UUID `json:"application_id"`
-		Provider      string    `json:"provider"`
-		Values        []struct {
-			Key   string `json:"key"`
-			Value string `json:"value"`
-		} `json:"values"`
+		ApplicationID uuid.UUID          `json:"application_id"`
+		Provider      string             `json:"provider"`
+		Value         StorageCredentials `json:"value"`
+	}
+
+	StorageCredentials struct {
+		AccessKeyID string `json:"access_key_id"`
+		SecretKey   string `json:"secret_key"`
+		Endpoint    string `json:"endpoint"`
+		Region      string `json:"region"`
 	}
 
 	AddCredentialsResponse struct {
@@ -60,6 +64,17 @@ type (
 		Name        string    `json:"name"`
 		Value       string    `json:"value"`
 		Environment string    `json:"environment"`
+	}
+
+	CreateServerConfigParams struct {
+		ApplicationID uuid.UUID
+		Name          string
+		Provider      string
+		Value         any
+	}
+
+	ServerConfigResponse struct {
+		ID uuid.UUID `json:"id"`
 	}
 )
 

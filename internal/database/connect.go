@@ -4,7 +4,7 @@ import (
 	"github.com/pkg/errors"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	types2 "sarabi/internal/types"
+	"sarabi/internal/types"
 )
 
 func Open(dir string) (*gorm.DB, error) {
@@ -14,14 +14,14 @@ func Open(dir string) (*gorm.DB, error) {
 	}
 
 	if err := db.Debug().AutoMigrate(
-		&types2.Application{},
-		&types2.Secret{},
-		&types2.Deployment{},
-		&types2.DeploymentSecret{},
-		&types2.Domain{},
-		&types2.BackupSettings{},
-		&types2.Credential{},
-		&types2.Backup{}); err != nil {
+		&types.Application{},
+		&types.Secret{},
+		&types.Deployment{},
+		&types.DeploymentSecret{},
+		&types.Domain{},
+		&types.BackupSettings{},
+		&types.ServerConfig{},
+		&types.Backup{}); err != nil {
 		return nil, err
 	}
 
