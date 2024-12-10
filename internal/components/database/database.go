@@ -11,6 +11,7 @@ import (
 	"sarabi/internal/integrations/docker"
 	service2 "sarabi/internal/service"
 	"sarabi/internal/storage"
+	"sarabi/internal/types"
 	"sarabi/logger"
 )
 
@@ -100,6 +101,11 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		PortBindings: portBindings,
 	}
 	startResp, err := d.dockerClient.StartContainerAndWait(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.appService.UpdateDeploymentStatus(ctx, deploymentID, types.DeploymentStatusActive)
 	if err != nil {
 		return nil, err
 	}

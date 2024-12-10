@@ -21,6 +21,7 @@ type (
 		ListVariables(ctx context.Context, applicationID uuid.UUID, environment string) ([]Var, error)
 		AddDomain(ctx context.Context, applicationID uuid.UUID, param AddDomainParam) error
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
+		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
 	}
 )
 
@@ -181,4 +182,23 @@ func (s service) RemoveDomain(ctx context.Context, applicationID uuid.UUID, name
 		Response: &response,
 	}
 	return s.apiClient.Do(ctx, params)
+}
+
+func (s service) ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error) {
+	var response struct {
+		Data []Deployment `json:"data"`
+	}
+
+	u := fmt.Sprintf("applications/%s/deployments", applicationID)
+	param := Params{
+		Method:   "GET",
+		Path:     u,
+		Response: &response,
+	}
+
+	err := s.apiClient.Do(ctx, param)
+	if err != nil {
+		return nil, err
+	}
+	return response.Data, nil
 }

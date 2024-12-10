@@ -13,9 +13,9 @@ type (
 	}
 
 	CreateApplicationParams struct {
-		Name          string `json:"name" validate:"required"`
-		Domain        string `json:"domain" validate:"required,fqdn"`
-		StorageEngine string `json:"storage_engine" validate:"required"`
+		Name          string   `json:"name" validate:"required"`
+		Domain        string   `json:"domain" validate:"required,fqdn"`
+		StorageEngine []string `json:"storage_engine" validate:"required"`
 		FePath        string
 		BePath        string
 	}
@@ -61,5 +61,18 @@ type (
 		Name        string `json:"name"`
 		Value       string `json:"value"`
 		Environment string `json:"environment"`
+	}
+
+	Deployment struct {
+		ID            uuid.UUID `json:"id"`
+		ApplicationID uuid.UUID `json:"applicationID"`
+		Environment   string    `json:"environment"`
+		Status        string    `json:"status"`
+		Instances     int       `json:"instances"`
+		Name          string    `json:"name"`
+		Port          string    `json:"port"`
+		InstanceType  string    `json:"instance_type"`
+		Identifier    string    `json:"identifier"`
+		CreatedAt     time.Time `json:"created_at"`
 	}
 )

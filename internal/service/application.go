@@ -16,6 +16,7 @@ type (
 		Create(ctx context.Context, params types.CreateApplicationParams) (*types.Application, error)
 		List(ctx context.Context) ([]*types.Application, error)
 		Get(ctx context.Context, applicationID uuid.UUID) (*types.Application, error)
+		GetByName(ctx context.Context, name string) (*types.Application, error)
 		GetDeployment(ctx context.Context, deploymentID uuid.UUID) (*types.Deployment, error)
 		CreateDeployments(ctx context.Context, params []types.CreateDeploymentParams) ([]*types.Deployment, error)
 		CreateDeployment(ctx context.Context, param types.CreateDeploymentParams) (*types.Deployment, error)
@@ -42,12 +43,17 @@ func (a *applicationService) Create(ctx context.Context, params types.CreateAppl
 	}
 
 	engine := make(types.StorageEngines, 0)
-	engine = append(engine, types.StorageEngine(params.StorageEngine))
+	for _, se := range params.StorageEngine {
+		engine = append(engine, types.StorageEngine(se))
+	}
+
 	app := &types.Application{
 		ID:             uuid.New(),
 		Name:           params.Name,
 		Domain:         params.Domain,
 		StorageEngines: engine,
+		Frontend:       params.Frontend,
+		Backend:        params.Backend,
 		CreatedAt:      time.Now(),
 	}
 	if err := a.applicationRepository.Save(ctx, app); err != nil {
@@ -114,7 +120,6 @@ func (a *applicationService) CreateDeployment(ctx context.Context, param types.C
 		ID:            uuid.New(),
 		ApplicationID: param.ApplicationID,
 		Environment:   param.Environment,
-		Status:        "CREATED",
 		Instances:     param.Instances,
 		Port:          param.Port,
 		InstanceType:  param.InstanceType,
@@ -135,4 +140,8 @@ func (a *applicationService) FindDeploymentsByIdentifier(ctx context.Context, id
 
 func (a *applicationService) FindDeploymentsByApplication(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error) {
 	return a.deploymentRepository.FindAll(ctx, applicationID)
+}
+
+func (a *applicationService) GetByName(ctx context.Context, name string) (*types.Application, error) {
+	return a.applicationRepository.FindByName(ctx, name)
 }

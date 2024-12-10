@@ -18,7 +18,7 @@ type Builder interface {
 	// Name returns the name of the specific component - just for identification
 	Name() string
 
-	// Run is responsible for starting the concrete component. implementation defers depending on the actual component.
+	// Run is responsible for starting the concrete component. implementation differs depending on the actual component.
 	// e.g for backend - it builds docker image from uploaded build, start the server container(s) and update proxy config to make the app accessible
 	Run(ctx context.Context, deploymentID uuid.UUID) (*BuilderResult, error)
 

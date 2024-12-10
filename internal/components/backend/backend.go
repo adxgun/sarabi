@@ -10,7 +10,7 @@ import (
 	proxycomponent "sarabi/internal/components/proxy"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
-	service2 "sarabi/internal/service"
+	"sarabi/internal/service"
 	"sarabi/internal/types"
 	"sarabi/logger"
 )
@@ -18,14 +18,14 @@ import (
 type (
 	backendComponent struct {
 		dockerClient  docker.Docker
-		appService    service2.ApplicationService
-		secretService service2.SecretService
+		appService    service.ApplicationService
+		secretService service.SecretService
 		caddyClient   caddy.Client
 	}
 )
 
-func New(dc docker.Docker, appService service2.ApplicationService,
-	sc service2.SecretService, caddyClient caddy.Client) components.Builder {
+func New(dc docker.Docker, appService service.ApplicationService,
+	sc service.SecretService, caddyClient caddy.Client) components.Builder {
 	return &backendComponent{
 		dockerClient:  dc,
 		appService:    appService,

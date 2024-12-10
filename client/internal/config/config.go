@@ -23,16 +23,16 @@ func Parse() (Config, error) {
 	c := Config{}
 	fi, err := os.Open(Path)
 	if err != nil {
-		return Config{}, err
+		return c, err
 	}
 
 	value, err := io.ReadAll(fi)
 	if err != nil {
-		return Config{}, err
+		return c, err
 	}
 
 	if err = yaml.Unmarshal(value, &c); err != nil {
-		return Config{}, err
+		return c, err
 	}
 
 	return c, nil

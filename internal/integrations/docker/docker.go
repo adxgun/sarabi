@@ -20,7 +20,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sarabi/internal/bundler"
-	types "sarabi/internal/types"
+	"sarabi/internal/types"
 	"sarabi/logger"
 	"strings"
 	"time"
@@ -40,6 +40,7 @@ type Docker interface {
 	ConnectContainer(ctx context.Context, containerName, networkName string) error
 	ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error)
 	CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error)
+	ContainerStatus(ctx context.Context, name string) (string, error)
 }
 
 type dockerClient struct {
@@ -406,6 +407,15 @@ func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, fil
 			Mode: stat.Mode(),
 		},
 	}, nil
+}
+
+func (d *dockerClient) ContainerStatus(ctx context.Context, name string) (string, error) {
+	result, err := d.hostClient.ContainerInspect(ctx, name)
+	if err != nil {
+		return "", err
+	}
+
+	return result.State.Status, nil
 }
 
 func (d *dockerClient) wait(ctx context.Context, containerID string) {

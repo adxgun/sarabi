@@ -22,6 +22,8 @@ type (
 		Name           string         `json:"name"`
 		Domain         string         `json:"domain"`
 		StorageEngines StorageEngines `json:"storage_engines"`
+		Frontend       string         `json:"frontend"`
+		Backend        string         `json:"backend"`
 		CreatedAt      time.Time      `json:"created_at"`
 		UpdatedAt      time.Time      `json:"-"`
 		DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
@@ -33,8 +35,9 @@ type (
 		Environment   string       `json:"environment"`
 		Status        string       `json:"status"`
 		Instances     int          `json:"instances"`
+		Name          string       `json:"name" gorm:"-"`
 		Port          string       `json:"port"`
-		InstanceType  InstanceType `json:"instance_type"` // frontend, backend, database, proxy
+		InstanceType  InstanceType `json:"instance_type"`
 		Identifier    string       `json:"identifier"`
 		Application   Application  `gorm:"foreignKey:ApplicationID" json:"-"`
 		CreatedAt     time.Time    `json:"created_at"`
@@ -46,9 +49,11 @@ type (
 
 type (
 	CreateApplicationParams struct {
-		Name          string `json:"name" binding:"required"`
-		Domain        string `json:"domain" binding:"required"`
-		StorageEngine string `json:"storage_engine" binding:"required"`
+		Name          string   `json:"name" binding:"required"`
+		Domain        string   `json:"domain" binding:"required"`
+		StorageEngine []string `json:"storage_engine" binding:"required"`
+		Frontend      string
+		Backend       string
 	}
 
 	DeployParams struct {

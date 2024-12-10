@@ -380,3 +380,35 @@ func (handler *ApiHandler) ListVariables(w http.ResponseWriter, r *http.Request)
 
 	ok(w, "success", values)
 }
+
+func (handler *ApiHandler) GetApplication(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+
+	var (
+		application *types.Application
+		err         error
+	)
+
+	if id := queryParams.Get("id"); id != "" {
+		applicationID, err := uuid.Parse(id)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+		application, err = handler.mn.GetApplication(r.Context(), &applicationID, nil)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+
+	if name := queryParams.Get("name"); name != "" {
+		application, err = handler.mn.GetApplication(r.Context(), nil, &name)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+
+	ok(w, "success", application)
+}

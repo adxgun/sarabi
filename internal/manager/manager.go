@@ -34,6 +34,7 @@ type (
 	Manager interface {
 		ValidateToken(ctx context.Context, token string) error
 		CreateApplication(ctx context.Context, param types.CreateApplicationParams) (*types.Application, error)
+		GetApplication(ctx context.Context, applicationID *uuid.UUID, name *string) (*types.Application, error)
 		Deploy(ctx context.Context, param *types.DeployParams) (*types.DeployResponse, error)
 		Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
@@ -97,6 +98,26 @@ func (m *manager) CreateApplication(ctx context.Context, param types.CreateAppli
 	return m.appService.Create(ctx, param)
 }
 
+func (m *manager) GetApplication(ctx context.Context, applicationID *uuid.UUID, name *string) (*types.Application, error) {
+	if applicationID == nil && name == nil {
+		return nil, errors.New("applicationID or name is required")
+	}
+
+	if applicationID != nil {
+		app, err := m.appService.Get(ctx, *applicationID)
+		if err != nil {
+			return nil, err
+		}
+		return app, nil
+	}
+
+	app, err := m.appService.GetByName(ctx, *name)
+	if err != nil {
+		return nil, err
+	}
+	return app, nil
+}
+
 func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types.DeployResponse, error) {
 	var backendDeployment *types.Deployment
 	var frontendDeployment *types.Deployment
@@ -114,23 +135,23 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 	}
 
 	if param.Backend != nil {
-		dbPort, err := sarabi.DefaultPortGenerator.Generate()
-		if err != nil {
-			return nil, err
-		}
-
-		dbDeployment, err := m.appService.CreateDeployment(ctx, types.CreateDeploymentParams{
-			ApplicationID: param.ApplicationID,
-			Environment:   param.Environment,
-			InstanceType:  types.InstanceTypeDatabase,
-			Identifier:    identifier,
-			Port:          dbPort,
-		})
-		if err != nil {
-			return nil, errors2.Wrap(err, "failed to create database deployment")
-		}
-
 		for _, se := range app.StorageEngines {
+			dbPort, err := sarabi.DefaultPortGenerator.Generate()
+			if err != nil {
+				return nil, err
+			}
+
+			dbDeployment, err := m.appService.CreateDeployment(ctx, types.CreateDeploymentParams{
+				ApplicationID: param.ApplicationID,
+				Environment:   param.Environment,
+				InstanceType:  types.InstanceTypeDatabase,
+				Identifier:    identifier,
+				Port:          dbPort,
+				Instances:     1,
+			})
+			if err != nil {
+				return nil, errors2.Wrap(err, "failed to create database deployment")
+			}
 			dbComponent := databasecomponent.New(m.dockerClient, m.appService,
 				m.secretService, databasecomponent.NewProvider(se), m.caddyClient)
 			if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
@@ -673,7 +694,41 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 }
 
 func (m *manager) ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error) {
-	return m.appService.FindDeploymentsByApplication(ctx, applicationID)
+	deployments, err := m.appService.FindDeploymentsByApplication(ctx, applicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("all", zap.Any("all_deps", deployments))
+
+	var (
+		result []*types.Deployment
+	)
+
+	for _, dep := range deployments {
+		if types.DeploymentStatus(dep.Status) == types.DeploymentStatusActive {
+			switch dep.InstanceType {
+			case types.InstanceTypeBackend:
+				for idx := 0; idx < dep.Instances; idx++ {
+					dep.Status, err = m.dockerClient.ContainerStatus(ctx, dep.ContainerName(idx))
+					dep.Name = fmt.Sprintf("%s-%d", dep.Application.Name, idx)
+					result = append(result, dep)
+				}
+			case types.InstanceTypeFrontend:
+				dep.Name = fmt.Sprintf("%s-frontend", dep.Application.Name)
+				result = append(result, dep)
+			case types.InstanceTypeDatabase:
+				for _, se := range dep.Application.StorageEngines {
+					containerName := databasecomponent.NewProvider(se).
+						ContainerName(dep)
+					dep.Status, err = m.dockerClient.ContainerStatus(ctx, containerName)
+					result = append(result, dep)
+				}
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (m *manager) ListApplications(ctx context.Context) ([]*types.Application, error) {

@@ -15,7 +15,6 @@ import (
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/cmdutil"
 	"sarabi/client/internal/config"
-	"strings"
 	"time"
 )
 
@@ -24,6 +23,12 @@ var (
 		"None", "Postgresql", "Mysql", "MongoDB", "Redis", "Done",
 	}
 	cfgFileName = ".sarabi.yml"
+	engineAlias = map[string]string{
+		"Postgresql": "postgres",
+		"Mysql":      "mysql",
+		"MongoDB":    "mongo",
+		"redis":      "redis",
+	}
 )
 
 func NewCreateAppCmd(svc api.Service) *cobra.Command {
@@ -77,7 +82,7 @@ func NewCreateAppCmd(svc api.Service) *cobra.Command {
 					continue
 				}
 
-				result = append(result, storageEngines[i])
+				result = append(result, engineAlias[storageEngines[i]])
 			}
 
 			bePathPrompt := createBackendFilesPathPrompt()
@@ -97,7 +102,7 @@ func NewCreateAppCmd(svc api.Service) *cobra.Command {
 			param := &api.CreateApplicationParams{
 				Name:          name,
 				Domain:        domainName,
-				StorageEngine: strings.Join(result, ","),
+				StorageEngine: result,
 				FePath:        fePath,
 				BePath:        bePath,
 			}

@@ -8,7 +8,7 @@ import (
 	"sarabi/internal/components"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
-	service2 "sarabi/internal/service"
+	"sarabi/internal/service"
 	"sarabi/internal/types"
 	"sarabi/logger"
 )
@@ -16,14 +16,14 @@ import (
 type (
 	frontendComponent struct {
 		dockerClient  docker.Docker
-		appService    service2.ApplicationService
-		secretService service2.SecretService
+		appService    service.ApplicationService
+		secretService service.SecretService
 		caddyClient   caddy.Client
 	}
 )
 
-func New(dockerClient docker.Docker, appService service2.ApplicationService,
-	secretService service2.SecretService, caddyClient caddy.Client) components.Builder {
+func New(dockerClient docker.Docker, appService service.ApplicationService,
+	secretService service.SecretService, caddyClient caddy.Client) components.Builder {
 	return &frontendComponent{
 		dockerClient:  dockerClient,
 		appService:    appService,
