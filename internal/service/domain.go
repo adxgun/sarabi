@@ -8,14 +8,14 @@ import (
 	"gorm.io/gorm"
 	"sarabi/internal/database"
 	"sarabi/internal/integrations/caddy"
-	types2 "sarabi/internal/types"
+	types "sarabi/internal/types"
 )
 
 type (
 	DomainService interface {
-		AddDomain(ctx context.Context, applicationID uuid.UUID, params types2.AddDomainParams) (*types2.Domain, error)
-		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types2.Domain, error)
-		FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types2.Domain, error)
+		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
+		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types.Domain, error)
+		FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error)
 	}
 
 	domainService struct {
@@ -31,7 +31,7 @@ func NewDomainService(caddyClient caddy.Client, domainRepo database.DomainReposi
 	}
 }
 
-func (d *domainService) AddDomain(ctx context.Context, applicationID uuid.UUID, params types2.AddDomainParams) (*types2.Domain, error) {
+func (d *domainService) AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error) {
 	domain, err := d.domainRepository.Find(ctx, params.Name)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
@@ -41,7 +41,7 @@ func (d *domainService) AddDomain(ctx context.Context, applicationID uuid.UUID, 
 		return nil, fmt.Errorf("this domain already exists in envronment: %s", domain.Environment)
 	}
 
-	newDomain := &types2.Domain{
+	newDomain := &types.Domain{
 		ID:            uuid.New(),
 		ApplicationID: applicationID,
 		Name:          params.Name,
@@ -57,7 +57,7 @@ func (d *domainService) AddDomain(ctx context.Context, applicationID uuid.UUID, 
 	return newDomain, nil
 }
 
-func (d *domainService) RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types2.Domain, error) {
+func (d *domainService) RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types.Domain, error) {
 	domain, err := d.domainRepository.Find(ctx, name)
 	if err != nil {
 		return nil, err
@@ -70,6 +70,6 @@ func (d *domainService) RemoveDomain(ctx context.Context, applicationID uuid.UUI
 	return domain, d.domainRepository.Delete(ctx, domain.ID)
 }
 
-func (d *domainService) FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types2.Domain, error) {
+func (d *domainService) FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error) {
 	return d.domainRepository.FindByApplicationID(ctx, applicationID)
 }

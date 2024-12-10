@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sarabi/internal/integrations/docker"
-	storage2 "sarabi/internal/storage"
+	storage "sarabi/internal/storage"
 	"sarabi/internal/types"
 	"sarabi/logger"
 	"time"
@@ -43,18 +43,18 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 		return ExecuteResponse{}, err
 	}
 
-	var st storage2.Storage
-	var stType storage2.Type
+	var st storage.Storage
+	var stType storage.Type
 	if params.StorageCredential == nil {
 		logger.Info("Object storage credential not configured, using File system storage for backup")
-		st = storage2.NewFileStorage()
-		stType = storage2.TypeFS
+		st = storage.NewFileStorage()
+		stType = storage.TypeFS
 	} else {
-		st, err = storage2.NewObjectStorage(*params.StorageCredential)
+		st, err = storage.NewObjectStorage(*params.StorageCredential)
 		if err != nil {
 			return ExecuteResponse{}, errors.Wrap(err, "invalid object storage credential")
 		}
-		stType = storage2.TypeS3
+		stType = storage.TypeS3
 	}
 
 	resultPath := fmt.Sprintf("/tmp/%s.sql", uuid.NewString())
@@ -68,7 +68,7 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 		"PGPASSWORD=" + password.Value,
 	}
 
-	location := fmt.Sprintf("%s/%s-%s/postgres-%s.sql", storage2.BackupDir, params.Application.Name, params.Environment, time.Now().Format("2006_01_02_03_04pm"))
+	location := fmt.Sprintf("%s/%s-%s/postgres-%s.sql", storage.BackupDir, params.Application.Name, params.Environment, time.Now().Format("2006_01_02_03_04pm"))
 	containerName := fmt.Sprintf("postgres-%s-%s", params.Application.Name, params.Environment)
 	_, err = p.dockerClient.ContainerExec(ctx, docker.ContainerExecParams{
 		ContainerName: containerName,

@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sarabi/internal/integrations/docker"
-	storage2 "sarabi/internal/storage"
+	storage "sarabi/internal/storage"
 	"sarabi/logger"
 	"time"
 )
@@ -42,18 +42,18 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 		return ExecuteResponse{}, err
 	}
 
-	var st storage2.Storage
-	var stType storage2.Type
+	var st storage.Storage
+	var stType storage.Type
 	if params.StorageCredential == nil {
 		logger.Info("Object storage credential not configured, using File system storage for backup")
-		st = storage2.NewFileStorage()
-		stType = storage2.TypeFS
+		st = storage.NewFileStorage()
+		stType = storage.TypeFS
 	} else {
-		st, err = storage2.NewObjectStorage(*params.StorageCredential)
+		st, err = storage.NewObjectStorage(*params.StorageCredential)
 		if err != nil {
 			return ExecuteResponse{}, errors.Wrap(err, "invalid object storage credential")
 		}
-		stType = storage2.TypeS3
+		stType = storage.TypeS3
 	}
 
 	// sh -c 'mysqldump -u sample-go-stage-user -p"password" mysql-sample-go-stage > /tmp/uuid.sql'
@@ -78,7 +78,7 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 		return ExecuteResponse{}, errors.Wrap(err, "failed to execute mysqldump")
 	}
 
-	location := fmt.Sprintf("%s/%s-%s/mysql-%s.sql", storage2.BackupDir, params.Application.Name, params.Environment, time.Now().Format("2006_01_02_03_04pm"))
+	location := fmt.Sprintf("%s/%s-%s/mysql-%s.sql", storage.BackupDir, params.Application.Name, params.Environment, time.Now().Format("2006_01_02_03_04pm"))
 	dmpFile, err := m.dockerClient.CopyFromContainer(ctx, containerName, resultPath)
 	if err != nil {
 		return ExecuteResponse{}, err

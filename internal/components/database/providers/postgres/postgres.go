@@ -3,7 +3,7 @@ package postgres
 import (
 	"fmt"
 	"github.com/google/uuid"
-	types2 "sarabi/internal/types"
+	types "sarabi/internal/types"
 )
 
 type postgresProvider struct{}
@@ -12,7 +12,7 @@ func New() *postgresProvider {
 	return &postgresProvider{}
 }
 
-func (p postgresProvider) ContainerName(dep *types2.Deployment) string {
+func (p postgresProvider) ContainerName(dep *types.Deployment) string {
 	return fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment)
 }
 
@@ -32,13 +32,13 @@ func (p postgresProvider) Setup() error {
 	return nil
 }
 
-func (p postgresProvider) EnvVars(dep *types2.Deployment) []types2.CreateSecretParams {
-	return []types2.CreateSecretParams{
-		{Key: "POSTGRES_DB", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types2.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_USER", Value: fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types2.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_HOST", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types2.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_PORT", Value: "5432", Environment: dep.Environment, InstanceType: types2.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types2.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+func (p postgresProvider) EnvVars(dep *types.Deployment) []types.CreateSecretParams {
+	return []types.CreateSecretParams{
+		{Key: "POSTGRES_DB", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_USER", Value: fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_HOST", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_PORT", Value: "5432", Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 	}
 }
 

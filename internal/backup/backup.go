@@ -3,15 +3,15 @@ package backup
 import (
 	"context"
 	"sarabi/internal/storage"
-	types2 "sarabi/internal/types"
+	types "sarabi/internal/types"
 )
 
 type (
 	ExecuteParams struct {
 		Environment       string
-		DatabaseVars      []*types2.Secret
-		StorageCredential *types2.StorageCredentials
-		Application       *types2.Application
+		DatabaseVars      []*types.Secret
+		StorageCredential *types.StorageCredentials
+		Application       *types.Application
 	}
 
 	ExecuteResponse struct {

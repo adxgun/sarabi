@@ -20,7 +20,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sarabi/internal/bundler"
-	types2 "sarabi/internal/types"
+	types "sarabi/internal/types"
 	"sarabi/logger"
 	"strings"
 	"time"
@@ -28,7 +28,7 @@ import (
 
 type Docker interface {
 	RunDind(ctx context.Context) error
-	BuildImage(ctx context.Context, application *types2.Deployment) (BuildImageResult, error)
+	BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error)
 	IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo, error)
 	CreateNetwork(ctx context.Context, name string) error
 	PullImage(ctx context.Context, name string) error
@@ -39,7 +39,7 @@ type Docker interface {
 	ExtractFiles(ctx context.Context, containerName, fileDir string) error
 	ConnectContainer(ctx context.Context, containerName, networkName string) error
 	ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error)
-	CopyFromContainer(ctx context.Context, containerName, filePath string) (types2.File, error)
+	CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error)
 }
 
 type dockerClient struct {
@@ -67,7 +67,7 @@ func (d *dockerClient) RunDind(ctx context.Context) error {
 	return d.dindRunner.Run(ctx)
 }
 
-func (d *dockerClient) BuildImage(ctx context.Context, application *types2.Deployment) (BuildImageResult, error) {
+func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error) {
 	buildCtx, err := bundler.CreateBuildContextFromTar(application.BinPath())
 	if err != nil {
 		return BuildImageResult{}, err
@@ -360,7 +360,7 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 
 // CopyFromContainer copy file from the specified container from the specified file path. Sometimes, it takes a few seconds for the file
 // to be available e.g after a database dump, so we included a retry to wait for the file to be available
-func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types2.File, error) {
+func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error) {
 	var (
 		retries = 10
 		delay   = 100 * time.Millisecond
@@ -380,17 +380,17 @@ func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, fil
 	containerAndPath := fmt.Sprintf("%s:%s", containerName, filePath)
 	cmd := exec.Command("docker", "cp", containerAndPath, ff)
 	if err := cmd.Run(); err != nil {
-		return types2.File{}, err
+		return types.File{}, err
 	}
 
 	fi, err := os.Open(ff)
 	if err != nil {
-		return types2.File{}, err
+		return types.File{}, err
 	}
 
 	stat, err := os.Stat(ff)
 	if err != nil {
-		return types2.File{}, err
+		return types.File{}, err
 	}
 
 	logger.Info("copy cmd",
@@ -398,9 +398,9 @@ func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, fil
 		zap.Any("size", stat.Size()),
 		zap.String("name", stat.Name()))
 
-	return types2.File{
+	return types.File{
 		Content: fi,
-		Stat: types2.FileStat{
+		Stat: types.FileStat{
 			Size: stat.Size(),
 			Name: stat.Name(),
 			Mode: stat.Mode(),

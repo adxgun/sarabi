@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sarabi"
-	types2 "sarabi/internal/types"
+	types "sarabi/internal/types"
 	"sarabi/logger"
 	"time"
 )
@@ -19,9 +19,9 @@ var (
 
 type Client interface {
 	Init(ctx context.Context) error
-	ApplyConfig(ctx context.Context, instanceType types2.InstanceType, deployment *types2.Deployment) error
-	ApplyDomainConfig(ctx context.Context, domain *types2.Domain, deployment *types2.Deployment, op types2.DomainOperation) error
-	RemoveConfig(ctx context.Context, deployment *types2.Deployment) error
+	ApplyConfig(ctx context.Context, instanceType types.InstanceType, deployment *types.Deployment) error
+	ApplyDomainConfig(ctx context.Context, domain *types.Domain, deployment *types.Deployment, op types.DomainOperation) error
+	RemoveConfig(ctx context.Context, deployment *types.Deployment) error
 	Wait(ctx context.Context) error
 }
 
@@ -53,11 +53,11 @@ func (c *caddyClient) Init(ctx context.Context) error {
 
 // ApplyConfig apply configuration for a specific instance type
 // it sends a request to get current caddy configuration, apply the patch and then update caddy with the new config
-func (c *caddyClient) ApplyConfig(ctx context.Context, instanceType types2.InstanceType, deployment *types2.Deployment) error {
+func (c *caddyClient) ApplyConfig(ctx context.Context, instanceType types.InstanceType, deployment *types.Deployment) error {
 	switch instanceType {
-	case types2.InstanceTypeBackend:
+	case types.InstanceTypeBackend:
 		return c.patchBackendConfig(ctx, deployment, "")
-	case types2.InstanceTypeFrontend:
+	case types.InstanceTypeFrontend:
 		return c.patchFrontendConfig(ctx, deployment)
 	default:
 		return errors.New("instance type not supported: " + string(instanceType))
@@ -86,7 +86,7 @@ func (c *caddyClient) Wait(ctx context.Context) error {
 	return errors.New("caddy failed to start")
 }
 
-func (c *caddyClient) ApplyDomainConfig(ctx context.Context, domain *types2.Domain, deployment *types2.Deployment, op types2.DomainOperation) error {
+func (c *caddyClient) ApplyDomainConfig(ctx context.Context, domain *types.Domain, deployment *types.Deployment, op types.DomainOperation) error {
 	cfg := &Config{}
 	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
 	if err != nil {
@@ -103,7 +103,7 @@ func (c *caddyClient) ApplyDomainConfig(ctx context.Context, domain *types2.Doma
 	hosts := make([]string, 0)
 	currentHosts := currentRoute.Match[0].Host
 
-	if op == types2.DomainOperationAdd {
+	if op == types.DomainOperationAdd {
 		hosts = append(hosts, currentHosts...)
 		hosts = append(hosts, domain.Name)
 	} else {
@@ -122,7 +122,7 @@ func (c *caddyClient) ApplyDomainConfig(ctx context.Context, domain *types2.Doma
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
 }
 
-func (c *caddyClient) patchBackendConfig(ctx context.Context, deployment *types2.Deployment, host string) error {
+func (c *caddyClient) patchBackendConfig(ctx context.Context, deployment *types.Deployment, host string) error {
 	cfg := &Config{}
 	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
 	if err != nil {
@@ -130,7 +130,7 @@ func (c *caddyClient) patchBackendConfig(ctx context.Context, deployment *types2
 	}
 
 	routes := cfg.Apps.HTTP.Servers[mainServer].Routes
-	routeIdx := c.findRouteIndex(routes, deployment.AccessURL(types2.InstanceTypeBackend))
+	routeIdx := c.findRouteIndex(routes, deployment.AccessURL(types.InstanceTypeBackend))
 	upStreams := make([]Upstream, 0, deployment.Instances)
 	for idx := 0; idx < deployment.Instances; idx++ {
 		upStreams = append(upStreams, Upstream{
@@ -143,7 +143,7 @@ func (c *caddyClient) patchBackendConfig(ctx context.Context, deployment *types2
 	updatedRoute := Route{
 		Handle: handles,
 		Match: []Match{
-			{Host: []string{deployment.AccessURL(types2.InstanceTypeBackend)}},
+			{Host: []string{deployment.AccessURL(types.InstanceTypeBackend)}},
 		},
 	}
 	if host != "" {
@@ -160,7 +160,7 @@ func (c *caddyClient) patchBackendConfig(ctx context.Context, deployment *types2
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
 }
 
-func (c *caddyClient) patchFrontendConfig(ctx context.Context, deployment *types2.Deployment) error {
+func (c *caddyClient) patchFrontendConfig(ctx context.Context, deployment *types.Deployment) error {
 	cfg := &Config{}
 	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
 	if err != nil {
@@ -168,13 +168,13 @@ func (c *caddyClient) patchFrontendConfig(ctx context.Context, deployment *types
 	}
 
 	routes := cfg.Apps.HTTP.Servers[mainServer].Routes
-	routeIdx := c.findRouteIndex(routes, deployment.AccessURL(types2.InstanceTypeFrontend))
+	routeIdx := c.findRouteIndex(routes, deployment.AccessURL(types.InstanceTypeFrontend))
 	handles := make([]Handle, 0)
 	handles = append(handles, Handle{Handler: "file_server", Root: deployment.SiteContentPath()})
 	updatedRoute := Route{
 		Handle: handles,
 		Match: []Match{
-			{Host: []string{deployment.AccessURL(types2.InstanceTypeFrontend)}},
+			{Host: []string{deployment.AccessURL(types.InstanceTypeFrontend)}},
 		},
 	}
 
@@ -188,7 +188,7 @@ func (c *caddyClient) patchFrontendConfig(ctx context.Context, deployment *types
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)
 }
 
-func (c *caddyClient) RemoveConfig(ctx context.Context, deployment *types2.Deployment) error {
+func (c *caddyClient) RemoveConfig(ctx context.Context, deployment *types.Deployment) error {
 	cfg := &Config{}
 	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
 	if err != nil {
