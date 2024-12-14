@@ -21,7 +21,8 @@ func Open(dir string) (*gorm.DB, error) {
 		&types.Domain{},
 		&types.BackupSettings{},
 		&types.ServerConfig{},
-		&types.Backup{}); err != nil {
+		&types.Backup{},
+		&types.NetworkAccess{}); err != nil {
 		return nil, err
 	}
 

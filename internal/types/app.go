@@ -43,6 +43,17 @@ type (
 		CreatedAt     time.Time    `json:"created_at"`
 	}
 
+	NetworkAccess struct {
+		ID            uuid.UUID   `gorm:"primaryKey" json:"id"`
+		ApplicationID uuid.UUID   `gorm:"not null" json:"applicationID"`
+		Application   Application `gorm:"foreignKey:ApplicationID" json:"-"`
+		IP            string      `json:"ip"`
+		Port          string      `json:"port"`
+		Environment   string      `json:"environment"`
+		CreatedAt     time.Time   `json:"created_at"`
+		DeletedAt     time.Time   `json:"deleted_at"`
+	}
+
 	DeploymentStatus string
 	InstanceType     string
 )

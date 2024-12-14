@@ -9,6 +9,7 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sarabi"
@@ -16,6 +17,8 @@ import (
 	backendcomponent "sarabi/internal/components/backend"
 	databasecomponent "sarabi/internal/components/database"
 	frontendcomponent "sarabi/internal/components/frontend"
+	"sarabi/internal/database"
+	"sarabi/internal/firewall"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
 	"sarabi/internal/service"
@@ -23,11 +26,17 @@ import (
 	"sarabi/internal/types"
 	"sarabi/logger"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
+type Op string
+
 const (
-	defaultBackupInterval = "*/30 * * * *" // 30 mins
+	defaultBackupInterval    = "*/30 * * * *" // 30 mins
+	OpAdd                 Op = "add"
+	OpRemove              Op = "remove"
 )
 
 type (
@@ -47,32 +56,43 @@ type (
 		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error)
 		ListApplications(ctx context.Context) ([]*types.Application, error)
-		EnableDatabaseAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string) error
+		ManageDatabaseNetworkAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string, op Op) error
 		ListVariables(ctx context.Context, applicationID uuid.UUID, environment *string) ([]types.VarResponse, error)
 	}
 )
 
 type manager struct {
-	appService    service.ApplicationService
-	secretService service.SecretService
-	dockerClient  docker.Docker
-	caddyClient   caddy.Client
-	store         bundler.ArtifactStore
-	domainService service.DomainService
-	backupService service.BackupService
+	appService      service.ApplicationService
+	secretService   service.SecretService
+	dockerClient    docker.Docker
+	caddyClient     caddy.Client
+	store           bundler.ArtifactStore
+	domainService   service.DomainService
+	backupService   service.BackupService
+	firewallManager firewall.Manager
+	naRepository    database.NetworkAccessRepository
 }
 
-func New(applicationService service.ApplicationService, secretService service.SecretService,
-	dockerClient docker.Docker, caddyClient caddy.Client,
-	st bundler.ArtifactStore, dms service.DomainService, backup service.BackupService) Manager {
+func New(
+	applicationService service.ApplicationService,
+	secretService service.SecretService,
+	dockerClient docker.Docker,
+	caddyClient caddy.Client,
+	st bundler.ArtifactStore,
+	dms service.DomainService,
+	backup service.BackupService,
+	fm firewall.Manager,
+	naRepository database.NetworkAccessRepository) Manager {
 	return &manager{
-		appService:    applicationService,
-		secretService: secretService,
-		dockerClient:  dockerClient,
-		caddyClient:   caddyClient,
-		store:         st,
-		domainService: dms,
-		backupService: backup,
+		appService:      applicationService,
+		secretService:   secretService,
+		dockerClient:    dockerClient,
+		caddyClient:     caddyClient,
+		store:           st,
+		domainService:   dms,
+		backupService:   backup,
+		firewallManager: fm,
+		naRepository:    naRepository,
 	}
 }
 
@@ -157,6 +177,17 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 			if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
 				return nil, errors2.Wrap(err, "failed to run database component")
 			}
+
+			go func(dPort string, fm firewall.Manager) {
+				port, _ := strconv.Atoi(dPort)
+				if err := fm.BlockPortAccess(uint(port)); err != nil {
+					logger.Info("failed to block port",
+						zap.Error(err),
+						zap.String("application", app.Name),
+						zap.String("env", dbDeployment.Environment),
+						zap.String("database", string(se)))
+				}
+			}(dbPort, m.firewallManager)
 		}
 
 		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval); err != nil {
@@ -735,7 +766,120 @@ func (m *manager) ListApplications(ctx context.Context) ([]*types.Application, e
 	return m.appService.List(ctx)
 }
 
-func (m *manager) EnableDatabaseAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string) error {
+func (m *manager) ManageDatabaseNetworkAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string, op Op) error {
+	if net.ParseIP(ip) == nil {
+		return fmt.Errorf("invalid IP: %s", ip)
+	}
+
+	nas, err := m.naRepository.FindByIP(ctx, ip)
+	if err != nil {
+		return err
+	}
+
+	switch op {
+	case OpAdd:
+		return m.handleIpWhiteList(ctx, applicationID, nas, environment, ip)
+	case OpRemove:
+		return m.handleIpBlacklist(ctx, applicationID, nas, environment, ip)
+	default:
+		return fmt.Errorf("unknown operation: %s", op)
+	}
+}
+
+func (m *manager) handleIpWhiteList(
+	ctx context.Context,
+	applicationID uuid.UUID,
+	nas []*types.NetworkAccess,
+	env,
+	ip string) error {
+	for _, n := range nas {
+		if n.IP == ip && n.Environment == env {
+			return errors.New("IP already whitelisted")
+		}
+	}
+
+	deployments, err := m.appService.FindCurrentlyActiveDeployments(ctx, applicationID, types.InstanceTypeDatabase)
+	if err != nil {
+		return err
+	}
+
+	dbDep := lo.Filter(deployments, func(item *types.Deployment, index int) bool {
+		return item.Environment == env
+	})
+	if len(dbDep) == 0 {
+		return errors.New("no active database deployment found for this environment")
+	}
+
+	for _, d := range dbDep {
+		p, err := strconv.Atoi(d.Port)
+		if err != nil {
+			return fmt.Errorf("invalid port: %s", err)
+		}
+
+		if err := m.firewallManager.WhitelistIP(ip, uint(p)); err != nil {
+			return fmt.Errorf("failed to whitelist IP: %s", err)
+		}
+	}
+
+	record := &types.NetworkAccess{
+		ApplicationID: applicationID,
+		IP:            ip,
+		Port:          "",
+		Environment:   env,
+		CreatedAt:     time.Now(),
+	}
+	err = m.naRepository.Save(ctx, record)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *manager) handleIpBlacklist(ctx context.Context,
+	applicationID uuid.UUID,
+	nas []*types.NetworkAccess,
+	env,
+	ip string) error {
+	found := false
+	var na types.NetworkAccess
+	for _, n := range nas {
+		if n.IP == ip && n.Environment == env {
+			found = true
+			na = *n
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("IP is not whitelisted for this application: %s", ip)
+	}
+
+	deployments, err := m.appService.FindCurrentlyActiveDeployments(ctx, applicationID, types.InstanceTypeDatabase)
+	if err != nil {
+		return err
+	}
+
+	dbDep := lo.Filter(deployments, func(item *types.Deployment, index int) bool {
+		return item.Environment == env
+	})
+	if len(dbDep) == 0 {
+		return fmt.Errorf("no active database deployment found for this environment: %s", env)
+	}
+
+	for _, d := range dbDep {
+		p, err := strconv.Atoi(d.Port)
+		if err != nil {
+			return fmt.Errorf("invalid port: %s", err)
+		}
+
+		if err := m.firewallManager.BlacklistIP(ip, uint(p)); err != nil {
+			return fmt.Errorf("failed to blacklist IP: %s", err)
+		}
+
+		err = m.naRepository.Remove(ctx, na.ID)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

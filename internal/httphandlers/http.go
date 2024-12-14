@@ -38,9 +38,7 @@ func (handler *ApiHandler) CreateApplication(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	app, err := handler.mn.CreateApplication(ctx, params)
+	app, err := handler.mn.CreateApplication(r.Context(), params)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -102,7 +100,11 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("starting deployment",
 		zap.Any("application_id", param.ApplicationID))
-	resp, err := handler.mn.Deploy(context.Background(), param)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	resp, err := handler.mn.Deploy(ctx, param)
 	if err != nil {
 		serverError(w, errors.Wrap(err, "deployment failed"))
 		return
@@ -128,7 +130,10 @@ func (handler *ApiHandler) UpdateVariables(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err = handler.mn.UpdateVariables(context.Background(), applicationID, body.Environment, body.Secrets...)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	err = handler.mn.UpdateVariables(ctx, applicationID, body.Environment, body.Secrets...)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -152,7 +157,10 @@ func (handler *ApiHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := handler.mn.Rollback(context.Background(), body.Identifier)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	result, err := handler.mn.Rollback(ctx, body.Identifier)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -182,7 +190,10 @@ func (handler *ApiHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := handler.mn.Scale(context.Background(), applicationID, body.Count)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	result, err := handler.mn.Scale(ctx, applicationID, body.Count)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -204,7 +215,7 @@ func (handler *ApiHandler) AddDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domain, err := handler.mn.AddDomain(context.Background(), applicationID, *params)
+	domain, err := handler.mn.AddDomain(r.Context(), applicationID, *params)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -229,7 +240,7 @@ func (handler *ApiHandler) RemoveDomain(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = handler.mn.RemoveDomain(context.Background(), applicationID, body.Name)
+	err = handler.mn.RemoveDomain(r.Context(), applicationID, body.Name)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -245,7 +256,7 @@ func (handler *ApiHandler) AddCredentials(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	result, err := handler.mn.AddCredentials(context.Background(), params)
+	result, err := handler.mn.AddCredentials(r.Context(), params)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -261,7 +272,7 @@ func (handler *ApiHandler) DownloadBackup(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	result, err := handler.mn.DownloadBackup(context.Background(), backupID)
+	result, err := handler.mn.DownloadBackup(r.Context(), backupID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -299,7 +310,7 @@ func (handler *ApiHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := handler.mn.ListBackups(context.Background(), applicationID)
+	result, err := handler.mn.ListBackups(r.Context(), applicationID)
 	if err != nil {
 		badRequest(w, err)
 		return
@@ -309,7 +320,7 @@ func (handler *ApiHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *ApiHandler) ListApplications(w http.ResponseWriter, r *http.Request) {
-	apps, err := handler.mn.ListApplications(context.Background())
+	apps, err := handler.mn.ListApplications(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
@@ -325,7 +336,7 @@ func (handler *ApiHandler) ListDeployments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	deps, err := handler.mn.ListDeployments(context.Background(), applicationID)
+	deps, err := handler.mn.ListDeployments(r.Context(), applicationID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -351,6 +362,7 @@ func (handler *ApiHandler) Destroy(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+
 	err = handler.mn.Destroy(ctx, applicationID, body.Environment)
 	if err != nil {
 		logger.Error("destroy failed",
@@ -370,9 +382,7 @@ func (handler *ApiHandler) ListVariables(w http.ResponseWriter, r *http.Request)
 	}
 
 	environment := r.URL.Query().Get("environment")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-	values, err := handler.mn.ListVariables(ctx, applicationID, &environment)
+	values, err := handler.mn.ListVariables(r.Context(), applicationID, &environment)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -411,4 +421,54 @@ func (handler *ApiHandler) GetApplication(w http.ResponseWriter, r *http.Request
 	}
 
 	ok(w, "success", application)
+}
+
+func (handler *ApiHandler) WhitelistIP(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	var body struct {
+		IP          string `json:"ip"`
+		Environment string `json:"environment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	err = handler.mn.ManageDatabaseNetworkAccess(r.Context(), applicationID, body.Environment, body.IP, manager.OpAdd)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "IP whitelisted!", nil)
+}
+
+func (handler *ApiHandler) BlacklistIP(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	var body struct {
+		IP          string `json:"ip"`
+		Environment string `json:"environment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	err = handler.mn.ManageDatabaseNetworkAccess(r.Context(), applicationID, body.Environment, body.IP, manager.OpRemove)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "IP blacklisted!", nil)
 }

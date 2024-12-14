@@ -60,3 +60,10 @@ type BackupRepository interface {
 	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*types.Backup, error)
 }
+
+type NetworkAccessRepository interface {
+	Save(ctx context.Context, na *types.NetworkAccess) error
+	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.NetworkAccess, error)
+	FindByIP(ctx context.Context, ip string) ([]*types.NetworkAccess, error)
+	Remove(ctx context.Context, naID uuid.UUID) error
+}
