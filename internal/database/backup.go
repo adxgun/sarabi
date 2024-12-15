@@ -56,3 +56,9 @@ func (b backupRepository) FindByID(ctx context.Context, id uuid.UUID) (*types.Ba
 	err := b.db.WithContext(ctx).Preload("Application").Where("id = ?", id).First(bk).Error
 	return bk, err
 }
+
+func (b backupSettingsRepository) UpdateExpression(ctx context.Context, id uuid.UUID, cronExpression string) error {
+	return b.db.WithContext(ctx).
+		Where("id = ?", id).
+		Update("cron_expression", cronExpression).Error
+}

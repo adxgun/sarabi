@@ -177,7 +177,8 @@ func (handler *ApiHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Count int `json:"count"`
+		Count       int    `json:"count"`
+		Environment string `json:"environment"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -190,10 +191,15 @@ func (handler *ApiHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(body.Environment) == 0 {
+		badRequest(w, fmt.Errorf("invalid environment value: %s", body.Environment))
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	result, err := handler.mn.Scale(ctx, applicationID, body.Count)
+	result, err := handler.mn.Scale(ctx, applicationID, body.Environment, body.Count)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -471,4 +477,30 @@ func (handler *ApiHandler) BlacklistIP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ok(w, "IP blacklisted!", nil)
+}
+
+func (handler *ApiHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	var body struct {
+		CronExpression string `json:"cron_expression"`
+		Environment    string `json:"environment"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	err = handler.mn.CreateBackup(r.Context(), applicationID, body.Environment, body.CronExpression)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	ok(w, "backup created", nil)
 }

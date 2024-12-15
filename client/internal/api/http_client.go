@@ -90,8 +90,10 @@ func (c client) Do(ctx context.Context, param Params) error {
 		return c.parseError(responseBody)
 	}
 
-	if err := json.Unmarshal(responseBody, &param.Response); err != nil {
-		return err
+	if param.Response != nil {
+		if err := json.Unmarshal(responseBody, &param.Response); err != nil {
+			return err
+		}
 	}
 	return nil
 }
