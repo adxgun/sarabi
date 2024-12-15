@@ -46,6 +46,7 @@ type BackupSettingsRepository interface {
 	Save(ctx context.Context, settings *types.BackupSettings) error
 	FindAll(ctx context.Context) ([]*types.BackupSettings, error)
 	FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.BackupSettings, error)
+	UpdateExpression(ctx context.Context, id uuid.UUID, cronExpression string) error
 }
 
 type ServerConfigRepository interface {
