@@ -149,8 +149,7 @@ func (b backupService) runBG(ctx context.Context, settings *types.BackupSettings
 func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSettings) error {
 	job, err := b.scheduler.NewJob(
 		gocron.CronJob(bc.CronExpression, false),
-		gocron.NewTask(b.runBG, ctx, bc),
-		gocron.WithIdentifier(bc.ID))
+		gocron.NewTask(b.runBG, ctx, bc))
 	if err != nil {
 		return err
 	}
@@ -179,7 +178,7 @@ func (b backupService) CreateBackupSettings(ctx context.Context, applicationID u
 		return strings.ToLower(item.Environment) == strings.ToLower(environment)
 	})
 	if len(exists) > 0 {
-		return b.updateBackupSettings(ctx, exists[0], cronExpression)
+		return nil
 	}
 
 	backupSettings := &types.BackupSettings{
@@ -195,19 +194,6 @@ func (b backupService) CreateBackupSettings(ctx context.Context, applicationID u
 	}
 
 	return b.runScheduler(ctx, backupSettings)
-}
-
-func (b backupService) updateBackupSettings(ctx context.Context, settings *types.BackupSettings, expression string) error {
-	if err := b.backupSettingsRepository.UpdateExpression(ctx, settings.ID, expression); err != nil {
-		return err
-	}
-
-	if err := b.scheduler.RemoveJob(settings.ID); err != nil {
-		return err
-	}
-
-	settings.CronExpression = expression
-	return b.runScheduler(ctx, settings)
 }
 
 func (b backupService) Download(ctx context.Context, backupID uuid.UUID) (*types.File, error) {

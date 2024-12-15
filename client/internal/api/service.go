@@ -22,8 +22,6 @@ type (
 		AddDomain(ctx context.Context, applicationID uuid.UUID, param AddDomainParam) error
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
-		Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error
-		Rollback(ctx context.Context, identifier string) error
 	}
 )
 
@@ -203,34 +201,4 @@ func (s service) ListDeployments(ctx context.Context, applicationID uuid.UUID) (
 		return nil, err
 	}
 	return response.Data, nil
-}
-
-func (s service) Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error {
-	u := fmt.Sprintf("applications/%s/scale", applicationID)
-	param := Params{
-		Method: "PATCH",
-		Path:   u,
-		Body:   params,
-	}
-
-	err := s.apiClient.Do(ctx, param)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s service) Rollback(ctx context.Context, identifier string) error {
-	params := RollbackParams{Identifier: identifier}
-	param := Params{
-		Method: "PATCH",
-		Path:   "applications/rollback",
-		Body:   params,
-	}
-
-	err := s.apiClient.Do(ctx, param)
-	if err != nil {
-		return err
-	}
-	return nil
 }

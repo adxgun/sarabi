@@ -48,7 +48,7 @@ type (
 		Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
 		Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error)
-		Scale(ctx context.Context, applicationID uuid.UUID, environment string, newInstanceCount int) ([]*types.Deployment, error)
+		Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error)
 		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
 		AddCredentials(ctx context.Context, params types.AddCredentialsParams) (*types.ServerConfigResponse, error)
@@ -58,7 +58,6 @@ type (
 		ListApplications(ctx context.Context) ([]*types.Application, error)
 		ManageDatabaseNetworkAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string, op Op) error
 		ListVariables(ctx context.Context, applicationID uuid.UUID, environment *string) ([]types.VarResponse, error)
-		CreateBackup(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error
 	}
 )
 
@@ -470,18 +469,14 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 	return result, nil
 }
 
-func (m *manager) Scale(ctx context.Context, applicationID uuid.UUID, environment string, newInstanceCount int) ([]*types.Deployment, error) {
+func (m *manager) Scale(ctx context.Context, applicationID uuid.UUID, newInstanceCount int) ([]*types.Deployment, error) {
 	deployments, err := m.appService.FindCurrentlyActiveDeployments(ctx, applicationID, types.InstanceTypeBackend)
 	if err != nil {
 		return nil, err
 	}
 
-	envDeployments := lo.Filter(deployments, func(item *types.Deployment, index int) bool {
-		return item.Environment == environment
-	})
-
-	if len(envDeployments) == 0 {
-		return nil, errors.New("no active backend deployment found in environment: " + environment)
+	if len(deployments) == 0 {
+		return nil, errors.New("no active backend deployment found")
 	}
 
 	newIdentifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
@@ -909,10 +904,6 @@ func (m *manager) ListVariables(ctx context.Context, applicationID uuid.UUID, en
 			Environment: item.Environment,
 		}
 	}), nil
-}
-
-func (m *manager) CreateBackup(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error {
-	return m.backupService.CreateBackupSettings(ctx, applicationID, environment, cronExpression)
 }
 
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {

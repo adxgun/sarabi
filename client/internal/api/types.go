@@ -35,15 +35,6 @@ type (
 		Instance    string `json:"instance_type" validate:"required"`
 		Environment string `json:"environment" validate:"required"`
 	}
-
-	ScaleAppParams struct {
-		Count       int    `json:"count"`
-		Environment string `json:"environment"`
-	}
-
-	RollbackParams struct {
-		Identifier string `json:"identifier"`
-	}
 )
 
 type (
