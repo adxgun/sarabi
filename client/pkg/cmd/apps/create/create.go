@@ -36,7 +36,7 @@ func NewCreateAppCmd(svc api.Service) *cobra.Command {
 	selectedEngines := map[int]bool{}
 
 	return &cobra.Command{
-		Use:   "create",
+		Use:   "schedule",
 		Short: "Create a new application",
 		Long:  "Create a new application on sarabi, name of the application must be unique. An error will be returned if application with same name already exists",
 		Run: func(cmd *cobra.Command, args []string) {

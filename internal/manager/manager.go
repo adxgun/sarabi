@@ -171,7 +171,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 				Instances:     1,
 			})
 			if err != nil {
-				return nil, errors2.Wrap(err, "failed to create database deployment")
+				return nil, errors2.Wrap(err, "failed to schedule database deployment")
 			}
 			dbComponent := databasecomponent.New(m.dockerClient, m.appService,
 				m.secretService, databasecomponent.NewProvider(se), m.caddyClient)
@@ -232,7 +232,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		}
 		fd, err := m.appService.CreateDeployment(ctx, createFrontend)
 		if err != nil {
-			return nil, errors2.Wrap(err, "failed to create frontend deployment")
+			return nil, errors2.Wrap(err, "failed to schedule frontend deployment")
 		}
 		if err := m.store.Save(ctx, param.Frontend, fd); err != nil {
 			return nil, errors2.Wrap(err, "failed to save frontend artifact")

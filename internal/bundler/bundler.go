@@ -46,7 +46,7 @@ func Gzip(sourceDir, outputFile string) error {
 
 	outFile, err := os.Create(outputFile)
 	if err != nil {
-		return fmt.Errorf("could not create output file: %w", err)
+		return fmt.Errorf("could not schedule output file: %w", err)
 	}
 	defer outFile.Close()
 
@@ -106,7 +106,7 @@ func Extract(src, dest string) error {
 
 	gzReader, err := gzip.NewReader(file)
 	if err != nil {
-		return fmt.Errorf("failed to create gzip reader: %w", err)
+		return fmt.Errorf("failed to schedule gzip reader: %w", err)
 	}
 	defer gzReader.Close()
 
@@ -124,16 +124,16 @@ func Extract(src, dest string) error {
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
+				return fmt.Errorf("failed to schedule directory: %w", err)
 			}
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-				return fmt.Errorf("failed to create parent directories: %w", err)
+				return fmt.Errorf("failed to schedule parent directories: %w", err)
 			}
 
 			outFile, err := os.Create(targetPath)
 			if err != nil {
-				return fmt.Errorf("failed to create file: %w", err)
+				return fmt.Errorf("failed to schedule file: %w", err)
 			}
 			defer outFile.Close()
 

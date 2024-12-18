@@ -44,6 +44,11 @@ type (
 	RollbackParams struct {
 		Identifier string `json:"identifier"`
 	}
+
+	CreateBackupParams struct {
+		Environment    string `json:"environment"`
+		CronExpression string `json:"cron_expression"`
+	}
 )
 
 type (

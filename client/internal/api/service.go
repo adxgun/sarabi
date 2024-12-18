@@ -24,6 +24,7 @@ type (
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error
 		Rollback(ctx context.Context, identifier string) error
+		CreateBackup(ctx context.Context, applicationID uuid.UUID, params CreateBackupParams) error
 	}
 )
 
@@ -225,6 +226,20 @@ func (s service) Rollback(ctx context.Context, identifier string) error {
 	param := Params{
 		Method: "PATCH",
 		Path:   "applications/rollback",
+		Body:   params,
+	}
+
+	err := s.apiClient.Do(ctx, param)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s service) CreateBackup(ctx context.Context, applicationID uuid.UUID, params CreateBackupParams) error {
+	param := Params{
+		Method: "PATCH",
+		Path:   fmt.Sprintf("applications/%s/backup-settings", applicationID),
 		Body:   params,
 	}
 

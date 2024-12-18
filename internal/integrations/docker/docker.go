@@ -59,7 +59,7 @@ func NewDockerClient() (Docker, error) {
 	dindHost := fmt.Sprintf("tcp://localhost:%s", dindPort)
 	dindClient, err := client.NewClientWithOpts(client.WithHost(dindHost), client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create dind client")
+		return nil, errors.Wrap(err, "failed to schedule dind client")
 	}
 	return &dockerClient{hostClient: c, dindClient: dindClient, dindRunner: newRunner(c)}, nil
 }

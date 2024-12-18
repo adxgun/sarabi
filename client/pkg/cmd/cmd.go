@@ -5,6 +5,7 @@ import (
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/config"
 	"sarabi/client/pkg/cmd/apps"
+	"sarabi/client/pkg/cmd/backup"
 	"sarabi/client/pkg/cmd/deploy"
 	"sarabi/client/pkg/cmd/deployments"
 	"sarabi/client/pkg/cmd/destroy"
@@ -27,8 +28,8 @@ func New() (*cobra.Command, error) {
 
 	svc := api.NewService(apiClient)
 	cmd := &cobra.Command{
-		Use:   "sarabi",
-		Short: "sarabi - the fullstack application deployment tool",
+		Use:   "floki",
+		Short: "floki - the fullstack application deployment tool",
 	}
 
 	cmd.AddCommand(apps.NewAppsCmd(svc))
@@ -39,5 +40,6 @@ func New() (*cobra.Command, error) {
 	cmd.AddCommand(deployments.NewDeploymentsCmd(svc, cfg))
 	cmd.AddCommand(scale.NewScaleAppCmd(svc, cfg))
 	cmd.AddCommand(rollback.NewRollbackCmd(svc))
+	cmd.AddCommand(backup.NewBackupCmd(svc, cfg))
 	return cmd, nil
 }

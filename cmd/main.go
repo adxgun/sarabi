@@ -14,6 +14,7 @@ import (
 	"sarabi/internal/bundler"
 	proxycomponent "sarabi/internal/components/proxy"
 	"sarabi/internal/database"
+	"sarabi/internal/firewall"
 	"sarabi/internal/httphandlers"
 	"sarabi/internal/integrations/caddy"
 	dockerclient "sarabi/internal/integrations/docker"
@@ -23,6 +24,11 @@ import (
 	"sarabi/logger"
 	"syscall"
 	"time"
+)
+
+const (
+	nftableName = "floki_nftable"
+	nfChainName = "floki_nfchain"
 )
 
 func main() {
@@ -114,12 +120,14 @@ func setup() (*http.Server, error, func() error) {
 	backupSettingsRepo := database.NewBackupSettingsRepository(db)
 	credentialRepo := database.NewServerConfigRepository(db)
 	backupRepository := database.NewBackupRepository(db)
+	naRepository := database.NewNetworkAccessRepository(db)
 
 	encryptor := sarabi.NewEncryptor()
 	appService := service2.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service2.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
 	caddyClient := caddy.NewCaddyClient()
 	domainService := service2.NewDomainService(caddyClient, domainRepo)
+	fm := firewall.NewManager(nftableName, nfChainName)
 
 	backupSvc, err := service2.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
 	if err != nil {
@@ -137,7 +145,7 @@ func setup() (*http.Server, error, func() error) {
 	}
 
 	mn := manager.New(appService, secretService, docker, caddyClient,
-		bundler.NewArtifactStore(), domainService, backupSvc)
+		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository)
 	apiHandler := httphandlers.NewApiHandler(mn)
 	routes := httphandlers.Routes(apiHandler)
 
@@ -205,7 +213,7 @@ func _main() {
 	})
 
 	if err != nil {
-		logger.Warn("failed to create app", zap.Error(err))
+		logger.Warn("failed to schedule app", zap.Error(err))
 	}
 	logger.Info("app created", zap.Any("app", app))
 
@@ -233,7 +241,7 @@ func _main() {
 	err = deploymentRepo.Save(ctx, deploymentFrontend)
 	err = deploymentRepo.Save(ctx, deployment)
 	if err != nil {
-		log.Fatal("failed to create deployment")
+		log.Fatal("failed to schedule deployment")
 	}
 
 	logger.Info("deployment created", zap.Any("deployment", deployment))
@@ -251,7 +259,7 @@ func _main() {
 	for _, ss := range dbSecrets {
 		v, err := secretService.Create(context.Background(), app.ID, ss.Name, ss.Value, "dev")
 		if err != nil {
-			logger.Error("failed to create secret", zap.Error(err))
+			logger.Error("failed to schedule secret", zap.Error(err))
 		} else {
 			logger.Info("secret created", zap.Any("secret", v))
 			createdSecrets = append(createdSecrets, v)
@@ -260,7 +268,7 @@ func _main() {
 
 	err = secretService.CreateDeploymentSecrets(ctx, deployment.ID, createdSecrets)
 	if err != nil {
-		log.Fatal("failed to create deployment secret", err)
+		log.Fatal("failed to schedule deployment secret", err)
 	}
 
 	fsComponents := []components.Builder{

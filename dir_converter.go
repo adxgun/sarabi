@@ -41,7 +41,7 @@ func GzipDirectory(sourceDir, outputFile string) error {
 
 	outFile, err := os.Create(outputFile)
 	if err != nil {
-		return fmt.Errorf("could not create output file: %w", err)
+		return fmt.Errorf("could not schedule output file: %w", err)
 	}
 	defer outFile.Close()
 
