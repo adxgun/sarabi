@@ -41,7 +41,7 @@ func NewCreateBackupScheduleCmd(svc api.Service, cfg config.Config) *cobra.Comma
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer cancel()
 
-			err := svc.CreateBackup(ctx, cfg.ApplicationID, params)
+			err := svc.CreateBackupSchedule(ctx, cfg.ApplicationID, params)
 			if err != nil {
 				cmdutil.PrintE(err.Error())
 				return
@@ -52,7 +52,7 @@ func NewCreateBackupScheduleCmd(svc api.Service, cfg config.Config) *cobra.Comma
 	}
 
 	cmd.Flags().StringVarP(&environment, "env", "e", "", "Environment you want to schedule backup for")
-	cmd.Flags().StringVarP(&cronExpression, "expression", "ex", "", "The cron expression that specify how often the backup should run")
+	cmd.Flags().StringVarP(&cronExpression, "expression", "x", "", "The cron expression that defines how often the backup should run")
 	return cmd
 }
 
