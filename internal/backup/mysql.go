@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"os"
 	"sarabi/internal/integrations/docker"
 	storage "sarabi/internal/storage"
 	"sarabi/logger"
@@ -81,11 +82,12 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 	location := fmt.Sprintf("%s/%s-%s/mysql-%s.sql", storage.BackupDir, params.Application.Name, params.Environment, time.Now().Format("2006_01_02_03_04pm"))
 	dmpFile, err := m.dockerClient.CopyFromContainer(ctx, containerName, resultPath)
 	if err != nil {
-		return ExecuteResponse{}, err
+		return ExecuteResponse{}, errors.Wrap(err, "failed to copy dump file")
 	}
 
 	defer func() {
 		_ = dmpFile.Content.Close()
+		_ = os.Remove(dmpFile.Stat.Name)
 	}()
 
 	if err := st.Save(ctx, location, dmpFile); err != nil {

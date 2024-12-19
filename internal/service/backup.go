@@ -11,6 +11,8 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
+	"os"
+	"os/signal"
 	"sarabi/internal/backup"
 	"sarabi/internal/database"
 	"sarabi/internal/integrations/docker"
@@ -18,13 +20,14 @@ import (
 	"sarabi/internal/types"
 	"sarabi/logger"
 	"strings"
+	"syscall"
 	"time"
 )
 
 type (
 	BackupService interface {
 		Run(ctx context.Context) error
-		CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error
+		CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string, updateRunner bool) error
 		Download(ctx context.Context, backupID uuid.UUID) (*types.File, error)
 		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
 	}
@@ -86,7 +89,8 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 		return types.InstanceType(item.InstanceType) == types.InstanceTypeDatabase &&
 			item.Environment == settings.Environment
 	})
-	storageCred, _ := b.findStorageCredential(ctx, application)
+	storageCred, err := b.findStorageCredential(ctx, application)
+	logger.Error("error getting cred", zap.Error(err))
 	param := backup.ExecuteParams{
 		Environment:       settings.Environment,
 		DatabaseVars:      dbVars,
@@ -165,7 +169,12 @@ func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSetting
 	return nil
 }
 
-func (b backupService) CreateBackupSettings(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error {
+func (b backupService) CreateBackupSettings(
+	ctx context.Context,
+	applicationID uuid.UUID,
+	environment string,
+	cronExpression string,
+	updateRunner bool) error {
 	if err := b.parseExpression(cronExpression); err != nil {
 		return err
 	}
@@ -179,7 +188,10 @@ func (b backupService) CreateBackupSettings(ctx context.Context, applicationID u
 		return strings.ToLower(item.Environment) == strings.ToLower(environment)
 	})
 	if len(exists) > 0 {
-		return b.updateBackupSettings(ctx, exists[0], cronExpression)
+		if updateRunner {
+			return b.updateBackupSettings(ctx, exists[0], cronExpression)
+		}
+		return nil
 	}
 
 	backupSettings := &types.BackupSettings{
@@ -202,7 +214,15 @@ func (b backupService) updateBackupSettings(ctx context.Context, settings *types
 		return err
 	}
 
-	if err := b.scheduler.RemoveJob(settings.ID); err != nil {
+	ctx, _ = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	err := b.scheduler.RemoveJob(settings.ID)
+	if errors.Is(err, gocron.ErrJobNotFound) {
+		settings.CronExpression = expression
+		return b.runScheduler(ctx, settings)
+	}
+
+	if err != nil {
 		return err
 	}
 

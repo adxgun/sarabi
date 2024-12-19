@@ -59,6 +59,7 @@ func (b backupRepository) FindByID(ctx context.Context, id uuid.UUID) (*types.Ba
 
 func (b backupSettingsRepository) UpdateExpression(ctx context.Context, id uuid.UUID, cronExpression string) error {
 	return b.db.WithContext(ctx).
+		Table("backup_settings").
 		Where("id = ?", id).
 		Update("cron_expression", cronExpression).Error
 }
