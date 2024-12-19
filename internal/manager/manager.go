@@ -53,12 +53,12 @@ type (
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) error
 		AddCredentials(ctx context.Context, params types.AddCredentialsParams) (*types.ServerConfigResponse, error)
 		DownloadBackup(ctx context.Context, backupID uuid.UUID) (*types.File, error)
-		ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error)
+		ListBackups(ctx context.Context, applicationID uuid.UUID, environment string) ([]*types.Backup, error)
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error)
 		ListApplications(ctx context.Context) ([]*types.Application, error)
 		ManageDatabaseNetworkAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string, op Op) error
 		ListVariables(ctx context.Context, applicationID uuid.UUID, environment *string) ([]types.VarResponse, error)
-		CreateBackup(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error
+		CreateBackupSchedule(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error
 	}
 )
 
@@ -191,7 +191,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 			}(dbPort, m.firewallManager)
 		}
 
-		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval); err != nil {
+		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval, false); err != nil {
 			return nil, errors2.Wrap(err, "failed to initialize auto-backup")
 		}
 
@@ -620,8 +620,18 @@ func (m *manager) DownloadBackup(ctx context.Context, backupID uuid.UUID) (*type
 	return m.backupService.Download(ctx, backupID)
 }
 
-func (m *manager) ListBackups(ctx context.Context, applicationID uuid.UUID) ([]*types.Backup, error) {
-	return m.backupService.ListBackups(ctx, applicationID)
+func (m *manager) ListBackups(ctx context.Context, applicationID uuid.UUID, environment string) ([]*types.Backup, error) {
+	data, err := m.backupService.ListBackups(ctx, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	if environment == "" {
+		return data, nil
+	}
+
+	return lo.Filter(data, func(item *types.Backup, index int) bool {
+		return item.Environment == environment
+	}), nil
 }
 
 func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error {
@@ -911,8 +921,8 @@ func (m *manager) ListVariables(ctx context.Context, applicationID uuid.UUID, en
 	}), nil
 }
 
-func (m *manager) CreateBackup(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error {
-	return m.backupService.CreateBackupSettings(ctx, applicationID, environment, cronExpression)
+func (m *manager) CreateBackupSchedule(ctx context.Context, applicationID uuid.UUID, environment string, cronExpression string) error {
+	return m.backupService.CreateBackupSettings(ctx, applicationID, environment, cronExpression, true)
 }
 
 func (m *manager) mergeSecrets(oldVars []*types.Secret, newVars []types.CreateSecretParams) []types.CreateSecretParams {

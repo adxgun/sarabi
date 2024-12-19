@@ -316,7 +316,8 @@ func (handler *ApiHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := handler.mn.ListBackups(r.Context(), applicationID)
+	environment := r.URL.Query().Get("environment")
+	result, err := handler.mn.ListBackups(r.Context(), applicationID, environment)
 	if err != nil {
 		badRequest(w, err)
 		return
@@ -496,7 +497,7 @@ func (handler *ApiHandler) CreateBackup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = handler.mn.CreateBackup(r.Context(), applicationID, body.Environment, body.CronExpression)
+	err = handler.mn.CreateBackupSchedule(r.Context(), applicationID, body.Environment, body.CronExpression)
 	if err != nil {
 		serverError(w, err)
 		return

@@ -19,7 +19,7 @@ import (
 	"sarabi/internal/integrations/caddy"
 	dockerclient "sarabi/internal/integrations/docker"
 	"sarabi/internal/manager"
-	service2 "sarabi/internal/service"
+	"sarabi/internal/service"
 	"sarabi/internal/storage"
 	"sarabi/logger"
 	"syscall"
@@ -123,13 +123,13 @@ func setup() (*http.Server, error, func() error) {
 	naRepository := database.NewNetworkAccessRepository(db)
 
 	encryptor := sarabi.NewEncryptor()
-	appService := service2.NewApplicationService(appRepo, deploymentRepo)
-	secretService := service2.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
+	appService := service.NewApplicationService(appRepo, deploymentRepo)
+	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
 	caddyClient := caddy.NewCaddyClient()
-	domainService := service2.NewDomainService(caddyClient, domainRepo)
-	fm := firewall.NewManager(nftableName, nfChainName)
+	domainService := service.NewDomainService(caddyClient, domainRepo)
+	fm := firewall.NewManager()
 
-	backupSvc, err := service2.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
+	backupSvc, err := service.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
 	if err != nil {
 		return nil, err, nil
 	}

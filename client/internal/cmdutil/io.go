@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	loadingSpinner = spinner.New(spinner.CharSets[0], time.Millisecond*100)
+	loadingSpinner = spinner.New(spinner.CharSets[5], time.Millisecond*100)
 )
 
 func PrintE(message string) {

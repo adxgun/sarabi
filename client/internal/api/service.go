@@ -24,7 +24,8 @@ type (
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error
 		Rollback(ctx context.Context, identifier string) error
-		CreateBackup(ctx context.Context, applicationID uuid.UUID, params CreateBackupParams) error
+		CreateBackupSchedule(ctx context.Context, applicationID uuid.UUID, params CreateBackupParams) error
+		ListBackups(ctx context.Context, applicationID uuid.UUID, environment string) ([]Backup, error)
 	}
 )
 
@@ -236,9 +237,9 @@ func (s service) Rollback(ctx context.Context, identifier string) error {
 	return nil
 }
 
-func (s service) CreateBackup(ctx context.Context, applicationID uuid.UUID, params CreateBackupParams) error {
+func (s service) CreateBackupSchedule(ctx context.Context, applicationID uuid.UUID, params CreateBackupParams) error {
 	param := Params{
-		Method: "PATCH",
+		Method: "PUT",
 		Path:   fmt.Sprintf("applications/%s/backup-settings", applicationID),
 		Body:   params,
 	}
@@ -248,4 +249,22 @@ func (s service) CreateBackup(ctx context.Context, applicationID uuid.UUID, para
 		return err
 	}
 	return nil
+}
+
+func (s service) ListBackups(ctx context.Context, applicationID uuid.UUID, environment string) ([]Backup, error) {
+	var response struct {
+		Data []Backup `json:"data"`
+	}
+	param := Params{
+		Method:   "GET",
+		Path:     fmt.Sprintf("/applications/%s/backups", applicationID),
+		Response: &response,
+		QueryParams: map[string]string{
+			"environment": environment,
+		},
+	}
+	if err := s.apiClient.Do(ctx, param); err != nil {
+		return nil, err
+	}
+	return response.Data, nil
 }

@@ -89,4 +89,14 @@ type (
 		Identifier    string    `json:"identifier"`
 		CreatedAt     time.Time `json:"created_at"`
 	}
+
+	Backup struct {
+		ID            uuid.UUID `json:"id" gorm:"primaryKey"`
+		ApplicationID uuid.UUID `json:"application_id"`
+		Environment   string    `json:"environment"`
+		CreatedAt     time.Time `json:"created_at"`
+		StorageEngine string    `json:"storage_engine"`
+		Location      string    `json:"location"`
+		StorageType   string    `json:"storage_type"`
+	}
 )

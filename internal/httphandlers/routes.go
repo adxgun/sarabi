@@ -2,11 +2,14 @@ package httphandlers
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"net/http"
 )
 
 func Routes(h *ApiHandler) chi.Router {
 	router := chi.NewRouter()
+	router.Use(middleware.Logger)
+
 	router.Route("/v1", func(r chi.Router) {
 		r.Post("/applications", h.CreateApplication)
 		r.Post("/deploy", h.Deploy)

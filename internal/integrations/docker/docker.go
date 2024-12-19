@@ -377,14 +377,13 @@ func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, fil
 		delay *= 2
 	}
 
-	ff := fmt.Sprintf("tmp/%s.sql", uuid.NewString())
+	ff := fmt.Sprintf("%s.sql", uuid.NewString())
 	containerAndPath := fmt.Sprintf("%s:%s", containerName, filePath)
 	cmd := exec.Command("docker", "cp", containerAndPath, ff)
-	if err := cmd.Run(); err != nil {
-		return types.File{}, err
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return types.File{}, errors.New(string(out))
 	}
 
-	time.Sleep(time.Minute * 2)
 	fi, err := os.Open(ff)
 	if err != nil {
 		return types.File{}, err
