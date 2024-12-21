@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"sarabi"
 	"sarabi/internal/database"
 	"sarabi/internal/types"
+	"sarabi/logger"
 	"time"
 )
 
@@ -137,6 +139,11 @@ func (s *secretService) FindDeploymentSecrets(ctx context.Context, deploymentID 
 }
 
 func (s *secretService) CreateServerConfig(ctx context.Context, params types.CreateServerConfigParams) (*types.ServerConfigResponse, error) {
+	logger.Info("received request to create server config",
+		zap.Any("application_id", params.ApplicationID),
+		zap.String("provider", params.Provider),
+		zap.String("name", params.Name))
+
 	serializedValue, err := json.Marshal(params.Value)
 	if err != nil {
 		return nil, err
@@ -149,13 +156,8 @@ func (s *secretService) CreateServerConfig(ctx context.Context, params types.Cre
 
 	existing, err := s.serverConfigRepository.FindByName(ctx, params.ApplicationID, params.Provider, params.Name)
 	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		err = s.serverConfigRepository.UpdateServerConfigValue(ctx, existing.ID, encrypted)
-		if err != nil {
-			return nil, err
-		}
-		return &types.ServerConfigResponse{ID: existing.ID}, nil
-	} else if err == nil {
 		sConfig := &types.ServerConfig{
+			ID:            uuid.New(),
 			ApplicationID: params.ApplicationID,
 			Provider:      params.Provider,
 			Name:          params.Name,
@@ -167,6 +169,12 @@ func (s *secretService) CreateServerConfig(ctx context.Context, params types.Cre
 			return nil, err
 		}
 		return &types.ServerConfigResponse{ID: sConfig.ID}, nil
+	} else if err == nil {
+		err = s.serverConfigRepository.UpdateServerConfigValue(ctx, existing.ID, encrypted)
+		if err != nil {
+			return nil, err
+		}
+		return &types.ServerConfigResponse{ID: existing.ID}, nil
 	} else {
 		return nil, err
 	}

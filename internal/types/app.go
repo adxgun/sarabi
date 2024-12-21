@@ -161,15 +161,10 @@ func (a *Deployment) InternalAccessURL(instanceId int) string {
 	return fmt.Sprintf("%s:%s", a.ContainerName(instanceId), a.Port)
 }
 
-func (a *Deployment) ProxyContainerName() string {
-	return fmt.Sprintf("%s-%s", a.Application.Name, "proxy")
-}
-
 func (a *Deployment) SiteContentPath() string {
 	return fmt.Sprintf("/var/caddy/share/%s", strings.ReplaceAll(a.ID.String(), "-", ""))
 }
 
 func (a *Deployment) BinPath() string {
-	// /var/sarabi/data/bins/{application-uuid}/deployments/{deployment-uuid}
 	return fmt.Sprintf("%s/bins/%s/deployments/%s.tar.gz", sarabiDataPath, a.ApplicationID, a.ID)
 }

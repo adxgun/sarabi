@@ -90,7 +90,6 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 			item.Environment == settings.Environment
 	})
 	storageCred, err := b.findStorageCredential(ctx, application)
-	logger.Error("error getting cred", zap.Error(err))
 	param := backup.ExecuteParams{
 		Environment:       settings.Environment,
 		DatabaseVars:      dbVars,
@@ -161,11 +160,9 @@ func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSetting
 
 	logger.Info("backup job queued",
 		zap.String("Name", job.Name()),
+		zap.String("expression", bc.CronExpression),
 		zap.String("environment", bc.Environment))
-	if !b.started {
-		b.scheduler.Start()
-	}
-	b.started = true
+	b.scheduler.Start()
 	return nil
 }
 

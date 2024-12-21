@@ -26,11 +26,6 @@ import (
 	"time"
 )
 
-const (
-	nftableName = "floki_nftable"
-	nfChainName = "floki_nfchain"
-)
-
 func main() {
 	if err := logger.InitLogger("development"); err != nil {
 		fmt.Printf("Error initializing logger: %v\n", err)
@@ -134,9 +129,9 @@ func setup() (*http.Server, error, func() error) {
 		return nil, err, nil
 	}
 
-	/*if err := backupSvc.Run(context.Background()); err != nil {
+	if err := backupSvc.Run(context.Background()); err != nil {
 		return nil, err, nil
-	}*/
+	}
 
 	caddyProxy := proxycomponent.New(docker, appService, caddyClient)
 	result, err := caddyProxy.Run(context.Background(), uuid.Nil)
