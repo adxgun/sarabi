@@ -100,3 +100,13 @@ type (
 		StorageType   string    `json:"storage_type"`
 	}
 )
+
+func (b Backup) StorageTypeString() string {
+	switch b.StorageType {
+	case "S3":
+		return "Object Storage"
+	case "File":
+		return "File Storage"
+	}
+	return "Unknown"
+}

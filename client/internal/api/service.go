@@ -10,6 +10,7 @@ import (
 type (
 	Service interface {
 		ApplicationService
+		BackupService
 	}
 
 	ApplicationService interface {
@@ -24,8 +25,12 @@ type (
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error
 		Rollback(ctx context.Context, identifier string) error
+	}
+
+	BackupService interface {
 		CreateBackupSchedule(ctx context.Context, applicationID uuid.UUID, params CreateBackupParams) error
 		ListBackups(ctx context.Context, applicationID uuid.UUID, environment string) ([]Backup, error)
+		DownloadBackup(ctx context.Context, backupID uuid.UUID) (io.ReadCloser, error)
 	}
 )
 
@@ -257,7 +262,7 @@ func (s service) ListBackups(ctx context.Context, applicationID uuid.UUID, envir
 	}
 	param := Params{
 		Method:   "GET",
-		Path:     fmt.Sprintf("/applications/%s/backups", applicationID),
+		Path:     fmt.Sprintf("applications/%s/backups", applicationID),
 		Response: &response,
 		QueryParams: map[string]string{
 			"environment": environment,
@@ -267,4 +272,8 @@ func (s service) ListBackups(ctx context.Context, applicationID uuid.UUID, envir
 		return nil, err
 	}
 	return response.Data, nil
+}
+
+func (s service) DownloadBackup(ctx context.Context, backupID uuid.UUID) (io.ReadCloser, error) {
+	return s.apiClient.Download(ctx, fmt.Sprintf("backups/%s/download", backupID))
 }

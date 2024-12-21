@@ -28,6 +28,7 @@ type (
 	Client interface {
 		Do(ctx context.Context, param Params) error
 		DoMultipart(ctx context.Context, files []MultipartFile, params Params) error
+		Download(ctx context.Context, path string) (io.ReadCloser, error)
 	}
 
 	client struct {
@@ -158,6 +159,25 @@ func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params P
 		return err
 	}
 	return nil
+}
+
+func (c client) Download(ctx context.Context, path string) (io.ReadCloser, error) {
+	downloadUrl := c.baseUrl + path
+	req, err := http.NewRequestWithContext(ctx, "GET", downloadUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode > 300 {
+		return nil, c.parseError([]byte("error"))
+	}
+
+	return resp.Body, nil
 }
 
 func (c client) parseError(b []byte) error {
