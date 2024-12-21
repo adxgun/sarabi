@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/config"
+	"sarabi/client/pkg/cmd/backup/download"
+	"sarabi/client/pkg/cmd/backup/list"
 	"sarabi/client/pkg/cmd/backup/schedule"
 )
 
@@ -18,5 +20,7 @@ func NewBackupCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	}
 
 	cmd.AddCommand(schedule.NewCreateBackupScheduleCmd(svc, cfg))
+	cmd.AddCommand(list.NewListBackupsCmd(svc, cfg))
+	cmd.AddCommand(download.NewDownloadBackupCmd(svc))
 	return cmd
 }
