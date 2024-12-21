@@ -325,6 +325,8 @@ func (d *dockerClient) ConnectContainer(ctx context.Context, containerName, netw
 	return nil
 }
 
+// ContainerExec executes a command in the specified container and returns the output
+// for some commands, the output is not immediately available(e.g a mysql dump command for a large db), so we wait for the command to finish
 func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error) {
 	execID, err := d.hostClient.ContainerExecCreate(ctx, params.ContainerName, container.ExecOptions{
 		Env:          params.Envs,
@@ -342,59 +344,49 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 		return nil, err
 	}
 
-	execResponse, err := d.hostClient.ContainerExecInspect(ctx, execID.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if execResponse.ExitCode == 0 {
-		return hr.Conn, nil
-	}
-
-	_, stdErr, err := ReadExecResponse(hr.Conn)
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, fmt.Errorf("exec cmd error: %s", stdErr)
-}
-
-// CopyFromContainer copy file from the specified container from the specified file path. Sometimes, it takes a few seconds for the file
-// to be available e.g after a database dump, so we included a retry to wait for the file to be available
-func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error) {
-	var (
-		retries = 10
-		delay   = 100 * time.Millisecond
-	)
-
-	for i := 0; i < retries; i++ {
-		_, err := d.hostClient.ContainerStatPath(ctx, containerName, filePath)
-		if err == nil {
-			break
+	for {
+		inspect, err := d.hostClient.ContainerExecInspect(ctx, execID.ID)
+		if err != nil {
+			return nil, err
 		}
 
-		time.Sleep(delay)
-		delay *= 2
+		if !inspect.Running {
+			if inspect.ExitCode == 0 {
+				break
+			} else {
+				_, stdErr, err := ReadExecResponse(hr.Conn)
+				if err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("exec cmd error: %s", stdErr)
+			}
+		}
+		time.Sleep(1 * time.Millisecond)
 	}
 
-	ff := fmt.Sprintf("%s.sql", uuid.NewString())
+	return hr.Conn, nil
+}
+
+// CopyFromContainer copies a file from a container to the host
+func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error) {
+	tempFile := fmt.Sprintf("%s.sql", uuid.NewString())
 	containerAndPath := fmt.Sprintf("%s:%s", containerName, filePath)
-	cmd := exec.Command("docker", "cp", containerAndPath, ff)
+	cmd := exec.CommandContext(ctx, "docker", "cp", containerAndPath, tempFile)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return types.File{}, errors.New(string(out))
 	}
 
-	fi, err := os.Open(ff)
+	fi, err := os.Open(tempFile)
 	if err != nil {
 		return types.File{}, err
 	}
 
-	stat, err := os.Stat(ff)
+	stat, err := os.Stat(tempFile)
 	if err != nil {
 		return types.File{}, err
 	}
 
-	logger.Info("copy cmd",
+	logger.Info("copy file from container successful",
 		zap.String("container", containerName),
 		zap.Any("size", stat.Size()),
 		zap.String("name", stat.Name()))
