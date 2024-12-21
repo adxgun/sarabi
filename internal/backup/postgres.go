@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"os"
 	"sarabi/internal/integrations/docker"
 	storage "sarabi/internal/storage"
 	"sarabi/internal/types"
@@ -86,9 +87,9 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params ExecuteParam
 
 	defer func() {
 		_ = dmpFile.Content.Close()
+		_ = os.Remove(dmpFile.Stat.Name)
 	}()
 
-	// 2667057d-b81c-4428-8584-383961150689.sql
 	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
 	}

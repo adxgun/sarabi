@@ -69,6 +69,7 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 	envs := []string{
 		"MYSQL_PWD=" + password.Value,
 	}
+
 	containerName := fmt.Sprintf("mysql-%s-%s", params.Application.Name, params.Environment)
 	_, err = m.dockerClient.ContainerExec(ctx, docker.ContainerExecParams{
 		ContainerName: containerName,

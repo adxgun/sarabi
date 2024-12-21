@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"os"
 	"sarabi/internal/integrations/docker"
 	storage "sarabi/internal/storage"
-	"sarabi/internal/types"
 	"sarabi/logger"
 	"time"
 )
@@ -78,15 +78,10 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 
 	defer func() {
 		_ = dmpFile.Content.Close()
+		_ = os.Remove(dmpFile.Stat.Name)
 	}()
 
-	f := types.File{
-		Content: dmpFile.Content,
-		// -1 allows the object storage sdk(minio) detects the size
-		Stat: types.FileStat{Size: -1, Name: dmpFile.Stat.Name},
-	}
-
-	if err := st.Save(ctx, location, f); err != nil {
+	if err := st.Save(ctx, location, dmpFile); err != nil {
 		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
 	}
 
