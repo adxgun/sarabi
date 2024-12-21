@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"sarabi"
 	"sarabi/internal/bundler"
@@ -45,8 +44,6 @@ func main() {
 		}
 	}()
 
-	// testCmd()
-
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
@@ -64,30 +61,6 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %s\n", err)
 	}
-}
-
-func testCmd() {
-	go func() {
-		start := time.Now()
-		f := "8e1041ed-b374-4c20-9df5-8da5e3eeb949.sql"
-		c := "mysql-large-user-app-dev"
-		fc := fmt.Sprintf("%s:/tmp/%s", c, f)
-		cmd := exec.CommandContext(context.Background(), "docker", "cp", fc, f)
-		if err := cmd.Run(); err != nil {
-			logger.Error("cmd failed", zap.Error(err))
-		}
-
-		diff := time.Now().Sub(start).Minutes()
-		fi, err := os.Stat(f)
-		if err != nil {
-			logger.Error("stat failed", zap.Error(err))
-		}
-
-		logger.Info("stat",
-			zap.Any("size", fi.Size()),
-			zap.Any("name", fi.Name()),
-			zap.Any("took", fmt.Sprintf("%f mins!", diff)))
-	}()
 }
 
 func setup() (*http.Server, error, func() error) {
