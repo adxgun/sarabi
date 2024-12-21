@@ -7,19 +7,19 @@ import (
 )
 
 type (
-	ExecuteParams struct {
+	Params struct {
 		Environment       string
 		DatabaseVars      []*types.Secret
 		StorageCredential *types.StorageCredentials
 		Application       *types.Application
 	}
 
-	ExecuteResponse struct {
+	Result struct {
 		Location    string
 		StorageType storage.Type
 	}
 
 	Executor interface {
-		Execute(ctx context.Context, params ExecuteParams) (ExecuteResponse, error)
+		Execute(ctx context.Context, params Params) (Result, error)
 	}
 )

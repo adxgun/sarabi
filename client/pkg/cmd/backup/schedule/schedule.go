@@ -19,7 +19,7 @@ func NewCreateBackupScheduleCmd(svc api.Service, cfg config.Config) *cobra.Comma
 		Use:     "schedule",
 		Short:   "Create a backup schedule",
 		Long:    "Schedule database backup for a specific environment.",
-		Example: "floki backup schedule --env dev --expression */15 * * * *",
+		Example: "floki backup schedule --env <environment> --expression <cron_expression>",
 		Run: func(cmd *cobra.Command, args []string) {
 			if environment == "" {
 				cmdutil.PrintE("Please specify environment")

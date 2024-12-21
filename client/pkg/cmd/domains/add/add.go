@@ -18,9 +18,10 @@ func NewAddDomainCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	param := &api.AddDomainParam{}
 
 	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "Add a domain to an application",
-		Long:  "Add the specified domain to an application. You must specify the environment and the instance you want to apply the domain to, e.g 'dev.app.io dev backend'",
+		Use:     "add",
+		Short:   "Add a domain to an application",
+		Long:    "Add the specified domain to an application. You must specify the environment and the instance you want to apply the domain to, e.g 'dev.app.io dev backend'",
+		Example: "floki domain add dev.app.io --env staging --instance backend",
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) <= 0 {
 				cmdutil.PrintE("please input your FQDN")

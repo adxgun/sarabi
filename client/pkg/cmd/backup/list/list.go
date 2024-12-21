@@ -14,7 +14,7 @@ func NewListBackupsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 		Use:     "list",
 		Short:   "List all backups",
 		Long:    "List all the backups that has been created for this application. You can filter by environment.",
-		Example: "floki backup list --env dev",
+		Example: "floki backup list --env <environment>",
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.StartLoading("Working...")
 			defer cmdutil.StopLoading()

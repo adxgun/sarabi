@@ -13,9 +13,10 @@ import (
 func NewListVarsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	var environment string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List application variables/secrets",
-		Long:  "List all application variables/secrets, you can specify '--env' flag to list vars for a specific environment",
+		Use:     "list",
+		Short:   "List application variables/secrets",
+		Long:    "List all application variables/secrets, you can specify '--env' flag to list vars for a specific environment",
+		Example: "floki vars list --env <environment>",
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.StartLoading("Working...")
 			defer cmdutil.StopLoading()

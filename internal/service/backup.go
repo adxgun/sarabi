@@ -90,7 +90,7 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 			item.Environment == settings.Environment
 	})
 	storageCred, err := b.findStorageCredential(ctx, application)
-	param := backup.ExecuteParams{
+	param := backup.Params{
 		Environment:       settings.Environment,
 		DatabaseVars:      dbVars,
 		StorageCredential: storageCred,

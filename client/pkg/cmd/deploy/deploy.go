@@ -26,7 +26,7 @@ func NewDeployCmd(svc api.Service, cfg config.Config) *cobra.Command {
 		Use:     "deploy",
 		Short:   "Deploy an application",
 		Long:    "Deploy an application on your server via sarabi.",
-		Example: "'sarabi deploy --env dev'",
+		Example: "floki deploy --env <environment> --replicas <number_of_replicas>",
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := mValidator.Struct(deployParams); err != nil {
 				cmdutil.PrintE(err.Error())
@@ -104,6 +104,6 @@ func NewDeployCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&deployParams.Environment, "env", "e", "", "Environment you're targeting for deployment")
-	cmd.Flags().IntVarP(&deployParams.Instances, "instances", "i", 1, "Total number of instances to run")
+	cmd.Flags().IntVarP(&deployParams.Instances, "replicas", "i", 1, "Total number of replicas to run")
 	return cmd
 }

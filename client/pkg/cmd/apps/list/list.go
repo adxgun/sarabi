@@ -12,9 +12,10 @@ import (
 
 func NewListAppsCmd(svc api.Service) *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
-		Short: "List applications",
-		Long:  "List all the applications on your sarabi server",
+		Use:     "list",
+		Short:   "List applications",
+		Long:    "List all the applications on your sarabi server",
+		Example: "floki apps list",
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.StartLoading("Working...")
 			defer cmdutil.StopLoading()

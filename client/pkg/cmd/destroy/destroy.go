@@ -15,9 +15,10 @@ import (
 func NewDestroyDeploymentCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	var environment string
 	cmd := &cobra.Command{
-		Use:   "destroy",
-		Short: "Destroy/Take down a deployment",
-		Long:  "Destroy/Take down a deployment on your sarabi server. If you specify the 'environment' flag, the deploy for this specific environment will be taken down or else all the deployment associated with this app will be destroyed/taken down",
+		Use:     "destroy",
+		Short:   "Destroy/Take down a deployment",
+		Long:    "Destroy/Take down a deployment on your sarabi server. If you specify the 'environment' flag, the deploy for this specific environment will be taken down or else all the deployment associated with this app will be destroyed/taken down",
+		Example: "floki deploy destroy --env <environment>",
 		Run: func(cmd *cobra.Command, args []string) {
 			if environment == "" {
 				p := promptui.Prompt{

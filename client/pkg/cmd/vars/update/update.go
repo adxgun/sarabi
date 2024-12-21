@@ -22,7 +22,7 @@ func NewUpdateVarsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 		Use:     "update",
 		Short:   "Update environment variables for backend instance(s)",
 		Long:    "Update environment variables. You can update these values via a .env file or you pass the values directly to the stdin. Note: This command restarts the application container",
-		Example: "'sarabi vars update --env dev --f .env -v APP_NAME=application.name STRIPE_KEY=secretKey'",
+		Example: "floki vars update --env <environment> --file <path_to_env_file> or floki vars update --env <environment> --var KEY1=value KEY2=value ...",
 		Run: func(cmd *cobra.Command, args []string) {
 			if environment == "" {
 				cmdutil.PrintE("Please specify environment --env")

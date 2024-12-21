@@ -24,17 +24,17 @@ func NewMongo(dc docker.Docker) Executor {
 	return &mongoBackupExecutor{dockerClient: dc}
 }
 
-func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) (ExecuteResponse, error) {
+func (m mongoBackupExecutor) Execute(ctx context.Context, params Params) (Result, error) {
 	logger.Info("starting mongo backup",
 		zap.String("application", params.Application.Name),
 		zap.String("env", params.Environment))
 	username, err := findVar("MONGO_INITDB_ROOT_USERNAME", params.DatabaseVars)
 	if err != nil {
-		return ExecuteResponse{}, err
+		return Result{}, err
 	}
 	password, err := findVar("MONGO_INITDB_ROOT_PASSWORD", params.DatabaseVars)
 	if err != nil {
-		return ExecuteResponse{}, err
+		return Result{}, err
 	}
 
 	var st storage.Storage
@@ -46,7 +46,7 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 	} else {
 		st, err = storage.NewObjectStorage(*params.StorageCredential)
 		if err != nil {
-			return ExecuteResponse{}, errors.Wrap(err, "invalid object storage credential")
+			return Result{}, errors.Wrap(err, "invalid object storage credential")
 		}
 		stType = storage.TypeS3
 	}
@@ -68,12 +68,12 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 		Cmd:           cmd,
 	})
 	if err != nil {
-		return ExecuteResponse{}, errors.Wrap(err, "failed to execute mongodump")
+		return Result{}, errors.Wrap(err, "failed to execute mongodump")
 	}
 
 	dmpFile, err := m.dockerClient.CopyFromContainer(ctx, containerName, resultPath)
 	if err != nil {
-		return ExecuteResponse{}, errors.Wrap(err, "failed to copy dump file")
+		return Result{}, errors.Wrap(err, "failed to copy dump file")
 	}
 
 	defer func() {
@@ -82,10 +82,10 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params ExecuteParams) 
 	}()
 
 	if err := st.Save(ctx, location, dmpFile); err != nil {
-		return ExecuteResponse{}, errors.Wrap(err, "failed to save file in storage")
+		return Result{}, errors.Wrap(err, "failed to save file in storage")
 	}
 
-	return ExecuteResponse{
+	return Result{
 		Location:    location,
 		StorageType: stType,
 	}, nil
