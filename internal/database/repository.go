@@ -68,3 +68,8 @@ type NetworkAccessRepository interface {
 	FindByIP(ctx context.Context, ip string) ([]*types.NetworkAccess, error)
 	Remove(ctx context.Context, naID uuid.UUID) error
 }
+
+type LogsRepository interface {
+	Save(ctx context.Context, log *types.Log) error
+	FindAll(ctx context.Context, applicationID uuid.UUID, filter types.Filter) ([]*types.Log, error)
+}

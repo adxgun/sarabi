@@ -15,6 +15,7 @@ var (
 	caddyAdminAccessPort = ":2019"
 	mainServer           = "main"
 	caddyUrl             = "http://localhost:2019/config/"
+	// caddyUrl = "http://host.docker.internal:2019/config/"
 )
 
 type Client interface {
@@ -29,7 +30,7 @@ type caddyClient struct {
 	httpClient HttpClient
 }
 
-func NewCaddyClient() Client {
+func NewClient() Client {
 	return &caddyClient{httpClient: newCaddyHttpClient()}
 }
 

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	dockerclient "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -18,7 +20,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"runtime"
 	"sarabi/internal/bundler"
 	"sarabi/internal/types"
 	"sarabi/logger"
@@ -27,7 +28,6 @@ import (
 )
 
 type Docker interface {
-	RunDind(ctx context.Context) error
 	BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error)
 	IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo, error)
 	CreateNetwork(ctx context.Context, name string) error
@@ -41,31 +41,29 @@ type Docker interface {
 	ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error)
 	CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error)
 	ContainerStatus(ctx context.Context, name string) (string, error)
+	ContainerLogs(ctx context.Context, name string) (io.ReadCloser, error)
+	ContainerEvents(ctx context.Context) (<-chan events.Message, <-chan error)
 }
 
 type dockerClient struct {
 	hostClient client.APIClient
-	dindClient client.APIClient
-	dindRunner Runner
 }
 
-func NewDockerClient() (Docker, error) {
-	c, err := client.NewClientWithOpts(client.FromEnv,
+func NewClient() (Docker, error) {
+	hostClient, err := client.NewClientWithOpts(client.FromEnv,
 		client.WithAPIVersionNegotiation(), client.WithTimeout(10*time.Minute))
 	if err != nil {
 		return nil, err
 	}
 
-	dindHost := fmt.Sprintf("tcp://localhost:%s", dindPort)
-	dindClient, err := client.NewClientWithOpts(client.WithHost(dindHost), client.WithAPIVersionNegotiation())
+	p, err := hostClient.Ping(context.Background())
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to schedule dind client")
+		return nil, errors.Wrap(err, "failed to connect to docker host")
 	}
-	return &dockerClient{hostClient: c, dindClient: dindClient, dindRunner: newRunner(c)}, nil
-}
 
-func (d *dockerClient) RunDind(ctx context.Context) error {
-	return d.dindRunner.Run(ctx)
+	logger.Info("docker client connected",
+		zap.Any("properties", p))
+	return &dockerClient{hostClient: hostClient}, nil
 }
 
 func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error) {
@@ -75,12 +73,7 @@ func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deploy
 	}
 
 	imageName := application.ImageName()
-	var dockerCli = d.hostClient
-	if runtime.GOOS == "linux" {
-		dockerCli = d.dindClient
-	}
-
-	response, err := dockerCli.ImageBuild(ctx, &buildCtx, dockerclient.ImageBuildOptions{
+	response, err := d.hostClient.ImageBuild(ctx, &buildCtx, dockerclient.ImageBuildOptions{
 		Tags:        []string{imageName},
 		Remove:      true,
 		ForceRemove: true,
@@ -89,7 +82,9 @@ func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deploy
 		return BuildImageResult{}, err
 	}
 
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	resp, err := readRemoteResponse(response.Body)
 	if err != nil {
 		return BuildImageResult{}, err
@@ -100,16 +95,6 @@ func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deploy
 		}
 		if next.Stream != "" && strings.Contains(next.Stream, "successfully built") {
 			return BuildImageResult{Name: imageName}, nil
-		}
-	}
-
-	if runtime.GOOS == "linux" {
-		saved, err := d.dindClient.ImageSave(ctx, []string{imageName})
-		defer saved.Close()
-
-		err = bundler.WriteToPath(saved, fmt.Sprintf("%s/%s.tar", sharedVolume, imageName))
-		if err != nil {
-			return BuildImageResult{}, err
 		}
 	}
 
@@ -163,21 +148,6 @@ func (d *dockerClient) PullImage(ctx context.Context, name string) error {
 }
 
 func (d *dockerClient) StartContainerAndWait(ctx context.Context, params StartContainerParams) (*ContainerInfo, error) {
-
-	if runtime.GOOS == "linux" {
-		tarPath := sharedVolume + "/" + params.Image + ".tar"
-		fi, err := os.Open(tarPath)
-		if err != nil {
-			return nil, err
-		}
-
-		r, err := d.hostClient.ImageLoad(ctx, fi, false)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to load image")
-		}
-		defer r.Body.Close()
-	}
-
 	portSet := make(map[nat.Port]struct{})
 	for _, ep := range params.ExposedPorts {
 		portSet[ep] = struct{}{}
@@ -408,6 +378,23 @@ func (d *dockerClient) ContainerStatus(ctx context.Context, name string) (string
 	}
 
 	return result.State.Status, nil
+}
+
+func (d *dockerClient) ContainerLogs(ctx context.Context, name string) (io.ReadCloser, error) {
+	return d.hostClient.ContainerLogs(ctx, name, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Tail:       "all",
+		Details:    false,
+	})
+}
+
+func (d *dockerClient) ContainerEvents(ctx context.Context) (<-chan events.Message, <-chan error) {
+	args := filters.NewArgs(filters.Arg("type", "container"))
+	return d.hostClient.Events(ctx, events.ListOptions{
+		Filters: args,
+	})
 }
 
 func (d *dockerClient) wait(ctx context.Context, containerID string) {
