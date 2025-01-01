@@ -17,6 +17,7 @@ import (
 	"sarabi/internal/httphandlers"
 	"sarabi/internal/integrations/caddy"
 	dockerclient "sarabi/internal/integrations/docker"
+	"sarabi/internal/logs"
 	"sarabi/internal/manager"
 	"sarabi/internal/service"
 	"sarabi/internal/storage"
@@ -64,14 +65,9 @@ func main() {
 }
 
 func setup() (*http.Server, error, func() error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	docker, err := dockerclient.NewDockerClient()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	docker, err := dockerclient.NewClient()
 	if err != nil {
-		return nil, err, nil
-	}
-
-	if err := docker.RunDind(ctx); err != nil {
 		return nil, err, nil
 	}
 
@@ -89,32 +85,38 @@ func setup() (*http.Server, error, func() error) {
 	credentialRepo := database.NewServerConfigRepository(db)
 	backupRepository := database.NewBackupRepository(db)
 	naRepository := database.NewNetworkAccessRepository(db)
+	logsRepository := database.NewLogsRepository(db)
 
 	encryptor := sarabi.NewEncryptor()
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
-	caddyClient := caddy.NewCaddyClient()
+	caddyClient := caddy.NewClient()
 	domainService := service.NewDomainService(caddyClient, domainRepo)
 	fm := firewall.NewManager()
+	logsManager := logs.NewManager(docker, appService, logsRepository, secretService)
 
 	backupSvc, err := service.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
 	if err != nil {
 		return nil, err, nil
 	}
 
-	if err := backupSvc.Run(context.Background()); err != nil {
+	if err := backupSvc.Run(ctx); err != nil {
 		return nil, err, nil
 	}
 
 	caddyProxy := proxycomponent.New(docker, appService, caddyClient)
-	result, err := caddyProxy.Run(context.Background(), uuid.Nil)
+	result, err := caddyProxy.Run(ctx, uuid.Nil)
 	if err != nil {
 		return nil, err, nil
 	}
 
+	go func() {
+		logsManager.Watch(ctx)
+	}()
+
 	mn := manager.New(appService, secretService, docker, caddyClient,
 		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository)
-	apiHandler := httphandlers.NewApiHandler(mn)
+	apiHandler := httphandlers.NewApiHandler(mn, logsManager)
 	routes := httphandlers.Routes(apiHandler)
 
 	addr := ":3646"
@@ -127,6 +129,8 @@ func setup() (*http.Server, error, func() error) {
 				err = sqlDB.Close()
 				logger.Info("DB Closed", zap.Error(err))
 			}
+
+			cancel()
 			return caddyProxy.Cleanup(context.Background(), result)
 		}
 }
@@ -158,7 +162,7 @@ func _main() {
 		log.Fatal(err)
 	}
 
-	docker, err := docker2.NewDockerClient()
+	docker, err := docker2.NewClient()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -172,7 +176,7 @@ func _main() {
 	encryptor := sarabi.NewEncryptor()
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo)
-	caddyClient := caddy.NewCaddyClient(appService)
+	caddyClient := caddy.NewClient(appService)
 	ctx := context.Background()
 
 	app, err := appService.Create(context.Background(), types.CreateApplicationParams{

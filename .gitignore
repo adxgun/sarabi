@@ -11,3 +11,7 @@ docker-compose.yml
 dynamic-config.yml
 traefik.yml
 layer4
+install.sh
+Dockerfile
+floki
+*.log

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"sarabi/internal/logs"
 	"sarabi/internal/manager"
 	"sarabi/internal/types"
 	"sarabi/logger"
@@ -24,11 +25,12 @@ var (
 type (
 	ApiHandler struct {
 		mn manager.Manager
+		lm logs.Manager
 	}
 )
 
-func NewApiHandler(mn manager.Manager) *ApiHandler {
-	return &ApiHandler{mn: mn}
+func NewApiHandler(mn manager.Manager, lm logs.Manager) *ApiHandler {
+	return &ApiHandler{mn: mn, lm: lm}
 }
 
 func (handler *ApiHandler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -504,4 +506,91 @@ func (handler *ApiHandler) CreateBackup(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ok(w, "backup created", nil)
+}
+
+func (handler *ApiHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	environment := r.URL.Query().Get("environment")
+	filter := types.Filter{
+		Environment: environment,
+	}
+
+	ch, errCh := handler.lm.Read(r.Context(), applicationID, filter)
+	for {
+		select {
+		case logEntry, ok := <-ch:
+			if !ok {
+				break
+			}
+			data, err := json.Marshal(logEntry)
+			if err != nil {
+				serverError(w, err)
+				break
+			}
+			_, _ = w.Write(data)
+		case err := <-errCh:
+			serverError(w, err)
+			break
+		}
+	}
+}
+
+func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
+	logger.Info("received request to tail logs")
+	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
+	if err != nil {
+		badRequest(w, err)
+		return
+	}
+
+	environment := r.URL.Query().Get("environment")
+	if environment == "" {
+		badRequest(w, errors.New("environment is required"))
+		return
+	}
+
+	ch := handler.lm.Register(applicationID, environment)
+
+	logger.Info("registered client for log stream",
+		zap.Any("application_id", applicationID),
+		zap.String("environment", environment))
+
+	// start SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	for {
+		select {
+		case logEntry, ok := <-ch:
+			if !ok {
+				logger.Error("log stream closed", zap.Any("application_id", applicationID))
+				serverError(w, errors.New("log stream closed"))
+				break
+			}
+
+			logger.Info("sending log entry", zap.Any("entry", logEntry))
+
+			data, err := json.Marshal(logEntry)
+			if err != nil {
+				logger.Error("failed to marshal log entry", zap.Error(err))
+				serverError(w, err)
+				continue
+			}
+			_, _ = w.Write(data)
+			_, _ = w.Write([]byte("\n\n"))
+			flusher, ok := w.(http.Flusher)
+			if ok {
+				flusher.Flush()
+			}
+		case <-r.Context().Done():
+			logger.Info("client disconnected")
+			return
+		}
+	}
 }

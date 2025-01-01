@@ -83,6 +83,13 @@ type (
 		InstanceType  InstanceType `json:"instance_type"` // frontend, backend, database, proxy
 		Identifier    string       `json:"identifier"`
 	}
+
+	ContainerIdentity struct {
+		DeploymentID uuid.UUID
+		Environment  string
+		InstanceID   int
+		ID           string
+	}
 )
 
 type StorageEngine string
@@ -137,10 +144,6 @@ func (a *Deployment) ImageName() string {
 	return fmt.Sprintf("%s:%s", strings.ReplaceAll(a.ID.String(), "-", ""), a.Environment)
 }
 
-func (a *Deployment) DBInstanceName() string {
-	return fmt.Sprintf("postgres-%s", a.Application.Name)
-}
-
 func (a *Deployment) NetworkName() string {
 	return fmt.Sprintf("network-%s-%s", strings.ReplaceAll(a.ApplicationID.String(), "-", ""), a.Environment)
 }
@@ -167,4 +170,8 @@ func (a *Deployment) SiteContentPath() string {
 
 func (a *Deployment) BinPath() string {
 	return fmt.Sprintf("%s/bins/%s/deployments/%s.tar.gz", sarabiDataPath, a.ApplicationID, a.ID)
+}
+
+func (a *Deployment) LogFilename() string {
+	return fmt.Sprintf("%s-%s-%s.log", a.Application.Name, a.InstanceType, a.Environment)
 }

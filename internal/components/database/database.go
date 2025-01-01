@@ -82,6 +82,9 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		envs = append(envs, ss.Env())
 	}
 
+	// TODO: Add support for volume mounts
+	// TODO: Add support for health checks
+	// TODO: restructure the database host mount path to be more dynamic(i.e use application_id+storage_engine)
 	volumeMounts := []string{
 		fmt.Sprintf("%s:%s", d.dbProvider.DataPath(), deployment.DatabaseMountVolume()),
 		storage.BackupTempDir + ":" + storage.BackupTempDir,

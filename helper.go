@@ -2,9 +2,15 @@ package sarabi
 
 import (
 	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"math/big"
 	"net"
+	"sarabi/internal/types"
+	"strconv"
+	"strings"
 )
 
 // StrContains returns true if "str" is in "values"
@@ -81,3 +87,44 @@ func (p randomIdGenerator) Generate(n int) (string, error) {
 var (
 	DefaultRandomIdGenerator = newRandomIdGenerator()
 )
+
+func HexToUUID(value string) (uuid.UUID, error) {
+	if len(value) != 32 {
+		return uuid.Nil, errors.New("UUID part must be exactly 32 hexadecimal characters")
+	}
+
+	uuidBytes, err := hex.DecodeString(value)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to decode UUID hex string: %v", err)
+	}
+
+	return uuid.FromBytes(uuidBytes)
+}
+
+func ParseContainerIdentity(id string, name string) (*types.ContainerIdentity, error) {
+	values := strings.Split(name, "-")
+	if len(values) != 3 {
+		return nil, errors.New("invalid container name: " + name)
+	}
+
+	if s := values[1]; s == "" {
+		return nil, errors.New("environment is empty")
+	}
+
+	deploymentID, err := HexToUUID(values[0])
+	if err != nil {
+		return nil, err
+	}
+
+	instanceID, err := strconv.Atoi(values[2])
+	if err != nil {
+		return nil, fmt.Errorf("invalid instanceID: %v", err)
+	}
+
+	return &types.ContainerIdentity{
+		ID:           id,
+		DeploymentID: deploymentID,
+		Environment:  values[1],
+		InstanceID:   instanceID,
+	}, nil
+}

@@ -11,6 +11,11 @@ import (
 	"net"
 )
 
+const (
+	tableName = "floki_nftables"
+	chainName = "floki_nftchains"
+)
+
 type managerLinux struct {
 	conn  *nftables.Conn
 	table *nftables.Table

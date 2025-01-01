@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,17 +16,15 @@ import (
 )
 
 var (
-	// caddyImageName = "caddy:2.9"
-	caddyImageName = "adxgun/caddy-layer4:2.9"
+	caddyImageName = "docker.io/library/caddy:2.9"
 	// allow only localhost to access caddy via API
 	defaultCaddyApiConfigContent = `
 		{
 			admin :2019
 		}
 		`
-	defaultConfigPath    = "/etc/caddy/Caddyfile"
-	ProxyServerName      = "main-proxy-server"
-	ProxyServerConfigUrl = "http://localhost:2019/config/"
+	defaultConfigPath = "/etc/caddy/Caddyfile"
+	ProxyServerName   = "main-proxy-server"
 )
 
 type (
@@ -66,7 +65,7 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 
 	err = p.dockerClient.PullImage(ctx, caddyImageName)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to pull caddy image")
 	}
 
 	// open http, https and the caddy API port
@@ -85,7 +84,7 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		"/var/caddy/share/:/var/caddy/share",
 		"/var/sarabi/data/caddy_data:/caddy_data",
 	}
-	// 518,061
+
 	params := docker.StartContainerParams{
 		Image:        caddyImageName,
 		Container:    ProxyServerName,
@@ -96,15 +95,15 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 	}
 	result, err := p.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to start caddy container")
 	}
 
 	if err := p.caddyClient.Wait(ctx); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "caddy failed to start")
 	}
 
 	if err := p.caddyClient.Init(ctx); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "caddy failed to init")
 	}
 
 	return &components.BuilderResult{

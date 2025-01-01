@@ -21,3 +21,7 @@ const (
 
 	bufferSize int = 4 * 1024 * 1024 // 4MB
 )
+
+func (t Type) String() string {
+	return string(t)
+}

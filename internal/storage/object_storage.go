@@ -37,7 +37,9 @@ func (s objectStorage) Save(ctx context.Context, location string, file types.Fil
 	}
 
 	// TODO: implement chunk writer
-	_, err := s.client.PutObject(ctx, backupBucket, location, file.Content, file.Stat.Size, minio.PutObjectOptions{})
+	_, err := s.client.PutObject(ctx, backupBucket, location, file.Content, file.Stat.Size, minio.PutObjectOptions{
+		ContentType: file.GetContentType(),
+	})
 	if err != nil {
 		return err
 	}

@@ -29,6 +29,8 @@ func Routes(h *ApiHandler) chi.Router {
 		r.Put("/applications/{application_id}/ip-whitelist", h.WhitelistIP)
 		r.Put("/applications/{application_id}/ip-blacklist", h.BlacklistIP)
 		r.Put("/applications/{application_id}/backup-settings", h.CreateBackup)
+		r.Get("/applications/{application_id}/logs", h.TailLogs)
+		r.Get("/applications/{application_id}/stream-logs", h.StreamLogs)
 
 		r.Get("/h", func(writer http.ResponseWriter, request *http.Request) {
 			ok(writer, "Hoi, we're HTTPs live!", struct{}{})

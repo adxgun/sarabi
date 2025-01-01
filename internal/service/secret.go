@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"sarabi"
@@ -24,6 +25,7 @@ type SecretService interface {
 	CreateServerConfig(ctx context.Context, params types.CreateServerConfigParams) (*types.ServerConfigResponse, error)
 	FindApplicationServerConfigs(ctx context.Context, applicationID uuid.UUID) ([]*types.ServerConfig, error)
 	DeleteDeploymentSecrets(ctx context.Context, deploymentID uuid.UUID) error
+	FindStorageCredentials(ctx context.Context, applicationID uuid.UUID) (*types.StorageCredentials, error)
 }
 
 type secretService struct {
@@ -212,6 +214,27 @@ func (s *secretService) DeleteDeploymentSecrets(ctx context.Context, deploymentI
 	return err
 }
 
+func (s *secretService) FindStorageCredentials(ctx context.Context, applicationID uuid.UUID) (*types.StorageCredentials, error) {
+	credentials, err := s.FindApplicationServerConfigs(ctx, applicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	objectStorageConfig := lo.Filter(credentials, func(item *types.ServerConfig, index int) bool {
+		return item.Name == types.ServerConfigObjectStorage
+	})
+	if len(objectStorageConfig) == 0 {
+		return nil, errors.New("no object storage configured")
+	}
+
+	value := objectStorageConfig[0]
+	cred := &types.StorageCredentials{}
+	if err := json.Unmarshal([]byte(value.Value), cred); err != nil {
+		return nil, err
+	}
+	return cred, nil
+}
+
 func FindSecret(name string, secrets []*types.Secret) (*types.Secret, error) {
 	for _, next := range secrets {
 		if next.Name == name {
@@ -219,13 +242,4 @@ func FindSecret(name string, secrets []*types.Secret) (*types.Secret, error) {
 		}
 	}
 	return nil, fmt.Errorf("secret: %s was not found", name)
-}
-
-func FindCredential(name string, creds []*types.ServerConfig) (*types.ServerConfig, error) {
-	for _, next := range creds {
-		if next.Name == name {
-			return next, nil
-		}
-	}
-	return nil, fmt.Errorf("credential: %s was not found", name)
 }
