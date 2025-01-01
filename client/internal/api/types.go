@@ -99,6 +99,11 @@ type (
 		Location      string    `json:"location"`
 		StorageType   string    `json:"storage_type"`
 	}
+
+	LogEntry struct {
+		Owner string `json:"owner"`
+		Log   string `json:"log"`
+	}
 )
 
 func (b Backup) StorageTypeString() string {

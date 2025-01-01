@@ -25,6 +25,7 @@ type (
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error
 		Rollback(ctx context.Context, identifier string) error
+		TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (io.ReadCloser, error)
 	}
 
 	BackupService interface {
@@ -275,5 +276,18 @@ func (s service) ListBackups(ctx context.Context, applicationID uuid.UUID, envir
 }
 
 func (s service) DownloadBackup(ctx context.Context, backupID uuid.UUID) (io.ReadCloser, error) {
-	return s.apiClient.Download(ctx, fmt.Sprintf("backups/%s/download", backupID))
+	param := Params{
+		Method: "GET",
+		Path:   fmt.Sprintf("backups/%s/download", backupID),
+	}
+	return s.apiClient.Download(ctx, param)
+}
+
+func (s service) TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (io.ReadCloser, error) {
+	param := Params{
+		Method:      "GET",
+		Path:        fmt.Sprintf("applications/%s/logs", applicationID),
+		QueryParams: map[string]string{"environment": environment},
+	}
+	return s.apiClient.Download(ctx, param)
 }

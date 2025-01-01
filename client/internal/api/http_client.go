@@ -28,7 +28,7 @@ type (
 	Client interface {
 		Do(ctx context.Context, param Params) error
 		DoMultipart(ctx context.Context, files []MultipartFile, params Params) error
-		Download(ctx context.Context, path string) (io.ReadCloser, error)
+		Download(ctx context.Context, param Params) (io.ReadCloser, error)
 	}
 
 	client struct {
@@ -133,8 +133,8 @@ func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params P
 		return err
 	}
 
-	url := c.baseUrl + params.Path
-	req, err := http.NewRequestWithContext(ctx, params.Method, url, body)
+	requestUrl := c.baseUrl + params.Path
+	req, err := http.NewRequestWithContext(ctx, params.Method, requestUrl, body)
 	if err != nil {
 		return err
 	}
@@ -161,9 +161,21 @@ func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params P
 	return nil
 }
 
-func (c client) Download(ctx context.Context, path string) (io.ReadCloser, error) {
-	downloadUrl := c.baseUrl + path
-	req, err := http.NewRequestWithContext(ctx, "GET", downloadUrl, nil)
+func (c client) Download(ctx context.Context, param Params) (io.ReadCloser, error) {
+	downloadUrl, err := url.Parse(c.baseUrl + param.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(param.QueryParams) > 0 {
+		values := url.Values{}
+		for k, v := range param.QueryParams {
+			values.Add(k, v)
+		}
+		downloadUrl.RawQuery = values.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, param.Method, downloadUrl.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -173,9 +185,9 @@ func (c client) Download(ctx context.Context, path string) (io.ReadCloser, error
 		return nil, err
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode > 300 {
+	/*if resp.StatusCode < 200 || resp.StatusCode > 300 {
 		return nil, c.parseError([]byte("error"))
-	}
+	}*/
 
 	return resp.Body, nil
 }

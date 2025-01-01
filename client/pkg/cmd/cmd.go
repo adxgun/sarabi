@@ -10,6 +10,7 @@ import (
 	"sarabi/client/pkg/cmd/deployments"
 	"sarabi/client/pkg/cmd/destroy"
 	"sarabi/client/pkg/cmd/domains"
+	"sarabi/client/pkg/cmd/logs"
 	"sarabi/client/pkg/cmd/rollback"
 	"sarabi/client/pkg/cmd/scale"
 	"sarabi/client/pkg/cmd/vars"
@@ -41,5 +42,6 @@ func New() (*cobra.Command, error) {
 	cmd.AddCommand(scale.NewScaleAppCmd(svc, cfg))
 	cmd.AddCommand(rollback.NewRollbackCmd(svc))
 	cmd.AddCommand(backup.NewBackupCmd(svc, cfg))
+	cmd.AddCommand(logs.NewLogsCmd(svc, cfg))
 	return cmd, nil
 }
