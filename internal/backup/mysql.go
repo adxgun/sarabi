@@ -98,5 +98,6 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params Params) (Result
 	return Result{
 		Location:    location,
 		StorageType: stType,
+		Size:        dmpFile.Stat.Size,
 	}, nil
 }

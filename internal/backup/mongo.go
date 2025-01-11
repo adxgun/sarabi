@@ -8,8 +8,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"os"
+	"sarabi/internal/bundler"
 	"sarabi/internal/integrations/docker"
 	storage "sarabi/internal/storage"
+	"sarabi/internal/types"
 	"sarabi/logger"
 	"time"
 )
@@ -78,15 +80,33 @@ func (m mongoBackupExecutor) Execute(ctx context.Context, params Params) (Result
 
 	defer func() {
 		_ = dmpFile.Content.Close()
-		_ = os.Remove(dmpFile.Stat.Name)
+		_ = os.RemoveAll(dmpFile.Stat.Name)
+		_ = os.RemoveAll(fmt.Sprintf("%s.tar.gz", dmpFile.Stat.Name))
 	}()
 
-	if err := st.Save(ctx, location, dmpFile); err != nil {
+	fi, err := bundler.GzipToReader(dmpFile.Stat.Name)
+	if err != nil {
+		return Result{}, errors.Wrap(err, "failed to gzip file")
+	}
+
+	stat, err := fi.Stat()
+	if err != nil {
+		return Result{}, errors.Wrap(err, "failed to get file stat")
+	}
+
+	if err := st.Save(ctx, location, types.File{
+		Content: fi,
+		Stat: types.FileStat{
+			Name: stat.Name(),
+			Size: stat.Size(),
+		},
+	}); err != nil {
 		return Result{}, errors.Wrap(err, "failed to save file in storage")
 	}
 
 	return Result{
 		Location:    location,
 		StorageType: stType,
+		Size:        stat.Size(),
 	}, nil
 }

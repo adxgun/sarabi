@@ -17,6 +17,7 @@ type (
 	Result struct {
 		Location    string
 		StorageType storage.Type
+		Size        int64
 	}
 
 	Executor interface {

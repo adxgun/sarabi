@@ -97,6 +97,7 @@ func (p postgresBackupExecutor) Execute(ctx context.Context, params Params) (Res
 	return Result{
 		Location:    location,
 		StorageType: stType,
+		Size:        dmpFile.Stat.Size,
 	}, nil
 }
 
