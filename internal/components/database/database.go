@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sarabi/internal/components"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
 	service2 "sarabi/internal/service"
-	"sarabi/internal/storage"
 	"sarabi/internal/types"
 	"sarabi/logger"
 )
@@ -35,7 +35,7 @@ func New(dc docker.Docker, appSvc service2.ApplicationService, secretService ser
 }
 
 func (d *databaseComponent) Name() string {
-	return "database:" + d.dbProvider.Image()
+	return "database-" + d.dbProvider.Image()
 }
 
 func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
@@ -52,6 +52,11 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	}
 	if running {
 		return &components.BuilderResult{ID: info.ID, Name: info.Name}, nil
+	}
+
+	resources, err := deployment.Application.ResourcesAllocation(d.dbProvider.Engine())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get resources allocation")
 	}
 
 	dbParams := d.dbProvider.EnvVars(deployment)
@@ -73,6 +78,11 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		return nil, err
 	}
 
+	volumeName := fmt.Sprintf("%s-%s-%s", deployment.ApplicationID, deployment.Environment, d.dbProvider.Engine().String())
+	if err := d.dockerClient.CreateVolume(ctx, volumeName); err != nil {
+		return nil, err
+	}
+
 	if err := d.dockerClient.PullImage(ctx, d.dbProvider.Image()); err != nil {
 		return nil, err
 	}
@@ -82,26 +92,25 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		envs = append(envs, ss.Env())
 	}
 
-	// TODO: Add support for volume mounts
 	// TODO: Add support for health checks
-	// TODO: restructure the database host mount path to be more dynamic(i.e use application_id+storage_engine)
-	volumeMounts := []string{
-		fmt.Sprintf("%s:%s", d.dbProvider.DataPath(), deployment.DatabaseMountVolume()),
-		storage.BackupTempDir + ":" + storage.BackupTempDir,
+	mounts := map[string]string{
+		volumeName: d.dbProvider.DataPath(),
 	}
 	tcpPort, _ := nat.NewPort("tcp", d.dbProvider.Port())
 	exposedPorts := []nat.Port{tcpPort}
 	portBindings := nat.PortMap{
 		tcpPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: deployment.Port}},
 	}
+	networkName := deployment.NetworkName()
 	params := docker.StartContainerParams{
 		Image:        d.dbProvider.Image(),
 		Container:    d.dbProvider.ContainerName(deployment),
-		Network:      deployment.NetworkName(),
-		Volumes:      volumeMounts,
+		Network:      &networkName,
 		Environments: envs,
 		ExposedPorts: exposedPorts,
 		PortBindings: portBindings,
+		Mounts:       mounts,
+		Resources:    resources,
 	}
 	startResp, err := d.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sarabi"
+	"sarabi/internal/misc"
 	types "sarabi/internal/types"
 	"sarabi/logger"
 	"time"
@@ -15,7 +15,6 @@ var (
 	caddyAdminAccessPort = ":2019"
 	mainServer           = "main"
 	caddyUrl             = "http://localhost:2019/config/"
-	// caddyUrl = "http://host.docker.internal:2019/config/"
 )
 
 type Client interface {
@@ -210,7 +209,7 @@ func (c *caddyClient) findRouteIndex(routes []Route, host string) int {
 	for idx := 0; idx < len(routes); idx++ {
 		next := routes[idx]
 		for _, h := range next.Match {
-			if sarabi.StrContains(host, h.Host) {
+			if misc.StrContains(host, h.Host) {
 				return idx
 			}
 		}

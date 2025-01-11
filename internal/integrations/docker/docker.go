@@ -11,7 +11,9 @@ import (
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
@@ -32,6 +34,7 @@ type Docker interface {
 	IsContainerRunning(ctx context.Context, container string) (bool, ContainerInfo, error)
 	CreateNetwork(ctx context.Context, name string) error
 	PullImage(ctx context.Context, name string) error
+	CreateVolume(ctx context.Context, name string) error
 	StartContainerAndWait(ctx context.Context, params StartContainerParams) (*ContainerInfo, error)
 	RestartContainer(ctx context.Context, name string) error
 	StopAndRemoveContainer(ctx context.Context, param StopContainerParams) error
@@ -43,6 +46,7 @@ type Docker interface {
 	ContainerStatus(ctx context.Context, name string) (string, error)
 	ContainerLogs(ctx context.Context, name string) (io.ReadCloser, error)
 	ContainerEvents(ctx context.Context) (<-chan events.Message, <-chan error)
+	ListContainers(ctx context.Context) ([]ContainerInfo, error)
 }
 
 type dockerClient struct {
@@ -154,12 +158,21 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, params StartCo
 	}
 
 	var containerNetwork *network.NetworkingConfig
-	if params.Network != "" {
+	if params.Network != nil {
 		containerNetwork = &network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{
-				params.Network: {},
+				*params.Network: {},
 			},
 		}
+	}
+
+	mounts := make([]mount.Mount, 0)
+	for k, v := range params.Mounts {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: k,
+			Target: v,
+		})
 	}
 
 	resp, err := d.hostClient.ContainerCreate(ctx,
@@ -167,6 +180,7 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, params StartCo
 			Env:          params.Environments,
 			Image:        params.Image,
 			ExposedPorts: portSet,
+			Labels:       params.DefaultLabels(),
 		},
 		&container.HostConfig{
 			Binds:        params.Volumes,
@@ -175,6 +189,11 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, params StartCo
 			RestartPolicy: container.RestartPolicy{
 				Name:              "on-failure",
 				MaximumRetryCount: 10,
+			},
+			Mounts: mounts,
+			Resources: container.Resources{
+				Memory:   params.Resources.Memory,
+				NanoCPUs: params.Resources.CPU,
 			},
 		},
 		containerNetwork,
@@ -397,6 +416,38 @@ func (d *dockerClient) ContainerEvents(ctx context.Context) (<-chan events.Messa
 	})
 }
 
+func (d *dockerClient) ListContainers(ctx context.Context) ([]ContainerInfo, error) {
+	containers, err := d.hostClient.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var containerInfos []ContainerInfo
+	for _, ct := range containers {
+		if d.isSarabiContainer(ct.Labels) {
+			containerInfos = append(containerInfos, ContainerInfo{
+				ID:    ct.ID,
+				Name:  ct.Names[0],
+				State: ct.State,
+			})
+		}
+	}
+	return containerInfos, nil
+}
+
+func (d *dockerClient) CreateVolume(ctx context.Context, name string) error {
+	_, err := d.hostClient.VolumeCreate(ctx, volume.CreateOptions{
+		Labels: map[string]string{
+			"sarabi.volume": "true",
+		},
+		Name: name,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (d *dockerClient) wait(ctx context.Context, containerID string) {
 	isRunning, _, err := d.IsContainerRunning(ctx, containerID)
 	if err != nil {
@@ -409,4 +460,11 @@ func (d *dockerClient) wait(ctx context.Context, containerID string) {
 			break
 		}
 	}
+}
+
+func (d *dockerClient) isSarabiContainer(l map[string]string) bool {
+	if val, ok := l["sarabi.application"]; ok {
+		return val == "true"
+	}
+	return false
 }

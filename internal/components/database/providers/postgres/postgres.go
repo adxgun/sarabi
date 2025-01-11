@@ -49,3 +49,7 @@ func (p postgresProvider) DataPath() string {
 func (p postgresProvider) Port() string {
 	return "5432"
 }
+
+func (p postgresProvider) Engine() types.StorageEngine {
+	return types.StorageEnginePostgres
+}

@@ -23,6 +23,7 @@ type (
 		StorageEngine StorageEngine `json:"storage_engine"`
 		Location      string        `json:"location"`
 		StorageType   string        `json:"storage_type"`
+		Size          int64         `json:"size"`
 
 		Application *Application `gorm:"foreignKey:ApplicationID"`
 	}

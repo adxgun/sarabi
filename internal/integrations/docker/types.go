@@ -9,6 +9,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"go.uber.org/zap"
 	"io"
+	"sarabi/internal/types"
 	"sarabi/logger"
 )
 
@@ -28,18 +29,27 @@ type BuildImageResult struct {
 }
 
 type ContainerInfo struct {
-	ID   string
-	Name string
+	ID    string
+	Name  string
+	State string
 }
 
 type StartContainerParams struct {
 	Image        string
 	Container    string
-	Network      string
+	Network      *string
 	Volumes      []string
 	Environments []string
 	ExposedPorts []nat.Port
 	PortBindings nat.PortMap
+	Mounts       map[string]string
+	Resources    types.ResourceAllocation
+}
+
+func (StartContainerParams) DefaultLabels() map[string]string {
+	return map[string]string{
+		"sarabi.application": "true",
+	}
 }
 
 type ContainerExecParams struct {

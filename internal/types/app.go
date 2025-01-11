@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 	"gorm.io/gorm"
 	"io"
 	"strings"
@@ -13,20 +15,22 @@ import (
 )
 
 var (
-	sarabiDataPath = "/var/sarabi/data"
+	sarabiDataPath         = "/var/sarabi/data"
+	defaultAllocPercentage = 0.25
 )
 
 type (
 	Application struct {
-		ID             uuid.UUID      `gorm:"primaryKey"`
-		Name           string         `json:"name"`
-		Domain         string         `json:"domain"`
-		StorageEngines StorageEngines `json:"storage_engines"`
-		Frontend       string         `json:"frontend"`
-		Backend        string         `json:"backend"`
-		CreatedAt      time.Time      `json:"created_at"`
-		UpdatedAt      time.Time      `json:"-"`
-		DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+		ID             uuid.UUID            `gorm:"primaryKey"`
+		Name           string               `json:"name"`
+		Domain         string               `json:"domain"`
+		StorageEngines StorageEngines       `json:"storage_engines"`
+		Frontend       string               `json:"frontend"`
+		Backend        string               `json:"backend"`
+		Resources      ResourcesAllocations `json:"resources"`
+		CreatedAt      time.Time            `json:"created_at"`
+		UpdatedAt      time.Time            `json:"-"`
+		DeletedAt      gorm.DeletedAt       `gorm:"index" json:"-"`
 	}
 
 	Deployment struct {
@@ -53,6 +57,18 @@ type (
 		CreatedAt     time.Time   `json:"created_at"`
 		DeletedAt     time.Time   `json:"deleted_at"`
 	}
+
+	ResourceAllocation struct {
+		CPU    int64 `json:"cpu"`
+		Memory int64 `json:"memory"`
+	}
+
+	ResourceAllocationConfig struct {
+		CPUPercentage    float64 `json:"cpu"`
+		MemoryPercentage float64 `json:"memory"`
+	}
+
+	ResourcesAllocations map[StorageEngine]ResourceAllocationConfig
 
 	DeploymentStatus string
 	InstanceType     string
@@ -99,6 +115,7 @@ const (
 	StorageEnginePostgres StorageEngine = "postgres"
 	StorageEngineMysql    StorageEngine = "mysql"
 	StorageEngineMongo    StorageEngine = "mongo"
+	StorageEngineRedis    StorageEngine = "redis"
 )
 
 const (
@@ -121,6 +138,10 @@ func (s *StorageEngine) Scan(value interface{}) error {
 	return nil
 }
 
+func (s StorageEngine) String() string {
+	return string(s)
+}
+
 func (s StorageEngines) Value() (driver.Value, error) {
 	return json.Marshal(s)
 }
@@ -129,6 +150,18 @@ func (s *StorageEngines) Scan(value interface{}) error {
 	bytes, ok := value.([]byte)
 	if !ok {
 		return errors.New("failed to scan []StorageEngine: type assertion to []byte failed")
+	}
+	return json.Unmarshal(bytes, s)
+}
+
+func (s ResourcesAllocations) Value() (driver.Value, error) {
+	return json.Marshal(s)
+}
+
+func (s *ResourcesAllocations) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan []ResourcesAllocations: type assertion to []byte failed")
 	}
 	return json.Unmarshal(bytes, s)
 }
@@ -174,4 +207,52 @@ func (a *Deployment) BinPath() string {
 
 func (a *Deployment) LogFilename() string {
 	return fmt.Sprintf("%s-%s-%s.log", a.Application.Name, a.InstanceType, a.Environment)
+}
+
+func (a *Application) ResourcesAllocation(se StorageEngine) (ResourceAllocation, error) {
+	defaultAlloc, err := hostResources()
+	if err != nil {
+		return ResourceAllocation{}, err
+	}
+
+	cfg, ok := a.Resources[se]
+	if ok {
+		return ResourceAllocation{
+			CPU:    int64(float64(defaultAlloc.CPU) * cfg.CPUPercentage * 1e9),
+			Memory: int64(float64(defaultAlloc.Memory) * cfg.MemoryPercentage),
+		}, nil
+	}
+
+	return defaultStorageEngineResourceAllocation()
+}
+
+// defaultStorageEngineResourceAllocation returns the default resource allocation for a storage engine
+// container. It allocates 25% of the total CPU and memory of the host machine.
+func defaultStorageEngineResourceAllocation() (ResourceAllocation, error) {
+	r, err := hostResources()
+	if err != nil {
+		return ResourceAllocation{}, err
+	}
+
+	return ResourceAllocation{
+		CPU:    int64(float64(r.CPU) * defaultAllocPercentage * 1e9),
+		Memory: int64(float64(r.Memory) * defaultAllocPercentage),
+	}, nil
+}
+
+func hostResources() (ResourceAllocation, error) {
+	vm, err := mem.VirtualMemory()
+	if err != nil {
+		return ResourceAllocation{}, err
+	}
+
+	cpuCount, err := cpu.Counts(true)
+	if err != nil {
+		return ResourceAllocation{}, err
+	}
+
+	return ResourceAllocation{
+		CPU:    int64(cpuCount),
+		Memory: int64(vm.Total),
+	}, nil
 }

@@ -44,3 +44,7 @@ func (p mysqlProvider) DataPath() string {
 func (p mysqlProvider) Port() string {
 	return "3306"
 }
+
+func (p mysqlProvider) Engine() types.StorageEngine {
+	return types.StorageEngineMysql
+}
