@@ -106,6 +106,8 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 			bk = backup.NewMysql(b.dockerClient)
 		case types.StorageEngineMongo:
 			bk = backup.NewMongo(b.dockerClient)
+		case types.StorageEngineRedis:
+			bk = backup.NewRedis(b.dockerClient)
 		default:
 			return nil
 		}
@@ -130,6 +132,7 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 				StorageEngine: se,
 				Location:      result.Location,
 				StorageType:   string(result.StorageType),
+				Size:          result.Size,
 			}
 			if err := b.backupRepository.Save(ctx, newBackup); err != nil {
 				logger.Error("failed to save backup", zap.Error(err))

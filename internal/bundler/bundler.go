@@ -97,6 +97,14 @@ func Gzip(sourceDir, outputFile string) error {
 	return nil
 }
 
+func GzipToReader(sourceDir string) (*os.File, error) {
+	tmp := filepath.Join(os.TempDir(), fmt.Sprintf("%s.tar.gz", filepath.Base(sourceDir)))
+	if err := Gzip(sourceDir, tmp); err != nil {
+		return nil, err
+	}
+	return os.Open(tmp)
+}
+
 func Extract(src, dest string) error {
 	file, err := os.Open(src)
 	if err != nil {

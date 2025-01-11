@@ -73,10 +73,11 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 	for idx := 0; idx < deployment.Instances; idx++ {
 		g.Go(func() error {
 			httpPort, _ := nat.NewPort("tcp", deployment.Port)
+			networkName := deployment.NetworkName()
 			params := docker.StartContainerParams{
 				Image:        deployment.ImageName(),
 				Container:    deployment.ContainerName(idx),
-				Network:      deployment.NetworkName(),
+				Network:      &networkName,
 				Volumes:      []string{},
 				Environments: envs,
 				ExposedPorts: []nat.Port{httpPort},

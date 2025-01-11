@@ -541,7 +541,6 @@ func (handler *ApiHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
-	logger.Info("received request to tail logs")
 	applicationID, err := uuid.Parse(chi.URLParam(r, "application_id"))
 	if err != nil {
 		badRequest(w, err)
@@ -560,7 +559,6 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		zap.Any("application_id", applicationID),
 		zap.String("environment", environment))
 
-	// start SSE
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -569,19 +567,18 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		select {
 		case logEntry, ok := <-ch:
 			if !ok {
-				logger.Error("log stream closed", zap.Any("application_id", applicationID))
+				logger.Error("log stream closed",
+					zap.Any("application_id", applicationID))
 				serverError(w, errors.New("log stream closed"))
 				break
 			}
 
-			logger.Info("sending log entry", zap.Any("entry", logEntry))
-
 			data, err := json.Marshal(logEntry)
 			if err != nil {
-				logger.Error("failed to marshal log entry", zap.Error(err))
 				serverError(w, err)
 				continue
 			}
+
 			_, _ = w.Write(data)
 			_, _ = w.Write([]byte("\n\n"))
 			flusher, ok := w.(http.Flusher)

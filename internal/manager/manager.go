@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	errors2 "github.com/pkg/errors"
+	errorpkg "github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
-	"sarabi"
 	"sarabi/internal/bundler"
 	backendcomponent "sarabi/internal/components/backend"
 	databasecomponent "sarabi/internal/components/database"
@@ -21,6 +20,7 @@ import (
 	"sarabi/internal/firewall"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
+	"sarabi/internal/misc"
 	"sarabi/internal/service"
 	"sarabi/internal/storage"
 	"sarabi/internal/types"
@@ -150,14 +150,14 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		return nil, err
 	}
 
-	identifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
+	identifier, err := misc.DefaultRandomIdGenerator.Generate(10)
 	if err != nil {
 		return nil, err
 	}
 
 	if param.Backend != nil {
 		for _, se := range app.StorageEngines {
-			dbPort, err := sarabi.DefaultPortGenerator.Generate()
+			dbPort, err := misc.DefaultPortGenerator.Generate()
 			if err != nil {
 				return nil, err
 			}
@@ -171,12 +171,12 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 				Instances:     1,
 			})
 			if err != nil {
-				return nil, errors2.Wrap(err, "failed to schedule database deployment")
+				return nil, errorpkg.Wrap(err, "failed to schedule database deployment")
 			}
 			dbComponent := databasecomponent.New(m.dockerClient, m.appService,
 				m.secretService, databasecomponent.NewProvider(se), m.caddyClient)
 			if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
-				return nil, errors2.Wrap(err, "failed to run database component")
+				return nil, errorpkg.Wrap(err, "failed to run database component")
 			}
 
 			go func(dPort string, fm firewall.Manager) {
@@ -192,12 +192,12 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		}
 
 		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval, false); err != nil {
-			return nil, errors2.Wrap(err, "failed to initialize auto-backup")
+			return nil, errorpkg.Wrap(err, "failed to initialize auto-backup")
 		}
 
-		appPort, err := sarabi.DefaultPortGenerator.Generate()
+		appPort, err := misc.DefaultPortGenerator.Generate()
 		if err != nil {
-			return nil, errors2.Wrap(err, "failed to allocate port")
+			return nil, errorpkg.Wrap(err, "failed to allocate port")
 		}
 
 		createBackend := types.CreateDeploymentParams{
@@ -210,15 +210,15 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		}
 		backendDeployment, err = m.appService.CreateDeployment(ctx, createBackend)
 		if err != nil {
-			return nil, errors2.Wrap(err, "failed to save backend deployment")
+			return nil, errorpkg.Wrap(err, "failed to save backend deployment")
 		}
 
 		if err := m.store.Save(ctx, param.Backend, backendDeployment); err != nil {
-			return nil, errors2.Wrap(err, "failed to save backend artifact")
+			return nil, errorpkg.Wrap(err, "failed to save backend artifact")
 		}
 
 		if err := m.setupAppVariables(ctx, backendDeployment); err != nil {
-			return nil, errors2.Wrap(err, "failed to setup app variables")
+			return nil, errorpkg.Wrap(err, "failed to setup app variables")
 		}
 	}
 
@@ -232,10 +232,10 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		}
 		fd, err := m.appService.CreateDeployment(ctx, createFrontend)
 		if err != nil {
-			return nil, errors2.Wrap(err, "failed to schedule frontend deployment")
+			return nil, errorpkg.Wrap(err, "failed to schedule frontend deployment")
 		}
 		if err := m.store.Save(ctx, param.Frontend, fd); err != nil {
-			return nil, errors2.Wrap(err, "failed to save frontend artifact")
+			return nil, errorpkg.Wrap(err, "failed to save frontend artifact")
 		}
 		frontendDeployment = fd
 	}
@@ -244,7 +244,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
 		result, err := backend.Run(ctx, backendDeployment.ID)
 		if err != nil {
-			return nil, errors2.Wrap(err, "failed to run backend component")
+			return nil, errorpkg.Wrap(err, "failed to run backend component")
 		}
 
 		if err := backend.Cleanup(ctx, result); err != nil {
@@ -257,7 +257,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		frontend := frontendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
 		result, err := frontend.Run(ctx, frontendDeployment.ID)
 		if err != nil {
-			return nil, errors2.Wrap(err, "failed to frontend component")
+			return nil, errorpkg.Wrap(err, "failed to frontend component")
 		}
 		if err := frontend.Cleanup(ctx, result); err != nil {
 			logger.Warn("cleanup failed: ", zap.Error(err))
@@ -293,7 +293,7 @@ func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, 
 		zap.String("application_id", applicationID.String()),
 		zap.String("env", environment))
 
-	identifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
+	identifier, err := misc.DefaultRandomIdGenerator.Generate(10)
 	if err != nil {
 		return err
 	}
@@ -364,7 +364,7 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 		return nil, err
 	}
 
-	newIdentifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
+	newIdentifier, err := misc.DefaultRandomIdGenerator.Generate(10)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +484,7 @@ func (m *manager) Scale(ctx context.Context, applicationID uuid.UUID, environmen
 		return nil, errors.New("no active backend deployment found in environment: " + environment)
 	}
 
-	newIdentifier, err := sarabi.DefaultRandomIdGenerator.Generate(10)
+	newIdentifier, err := misc.DefaultRandomIdGenerator.Generate(10)
 	if err != nil {
 		return nil, err
 	}
@@ -594,11 +594,11 @@ func (m *manager) AddCredentials(ctx context.Context, params types.AddCredential
 
 	s, err := storage.NewObjectStorage(cred)
 	if err != nil {
-		return nil, errors2.Wrap(err, "failed to validate object storage credentials")
+		return nil, errorpkg.Wrap(err, "failed to validate object storage credentials")
 	}
 
 	if err := s.Ping(ctx); err != nil {
-		return nil, errors2.Wrap(err, "failed to validate object storage credentials")
+		return nil, errorpkg.Wrap(err, "failed to validate object storage credentials")
 	}
 
 	addConfigParams := types.CreateServerConfigParams{
@@ -717,6 +717,7 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 	for k, _ := range uniqueEnvs {
 		envs = append(envs, k)
 	}
+	// TODO: Delete scheduled backups
 	for _, se := range application.StorageEngines {
 		for _, env := range envs {
 			dbContainerName := fmt.Sprintf("%s-%s-%s", se, application.Name, env)

@@ -1,4 +1,4 @@
-package sarabi
+package misc
 
 import (
 	"github.com/google/uuid"

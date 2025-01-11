@@ -9,8 +9,8 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"sarabi"
 	"sarabi/internal/database"
+	"sarabi/internal/misc"
 	"sarabi/internal/types"
 	"sarabi/logger"
 	"time"
@@ -29,13 +29,13 @@ type SecretService interface {
 }
 
 type secretService struct {
-	encryptor                  sarabi.Encryptor
+	encryptor                  misc.Encryptor
 	repository                 database.SecretRepository
 	deploymentSecretRepository database.DeploymentSecretRepository
 	serverConfigRepository     database.ServerConfigRepository
 }
 
-func NewSecretService(enc sarabi.Encryptor, repo database.SecretRepository,
+func NewSecretService(enc misc.Encryptor, repo database.SecretRepository,
 	depSecretRepo database.DeploymentSecretRepository, serverConfigRepository database.ServerConfigRepository) SecretService {
 	return &secretService{
 		encryptor:                  enc,

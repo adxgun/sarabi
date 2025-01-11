@@ -23,8 +23,10 @@ var (
 			admin :2019
 		}
 		`
-	defaultConfigPath = "/etc/caddy/Caddyfile"
-	ProxyServerName   = "main-proxy-server"
+	defaultConfigPath      = "/etc/caddy/Caddyfile"
+	ProxyServerName        = "main-proxy-server"
+	proxyStaticFilesVolume = "sarabi-statics"
+	proxyConfigVolume      = "sarabi-proxy-config"
 )
 
 type (
@@ -63,6 +65,16 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		return nil, err
 	}
 
+	err = p.dockerClient.CreateVolume(ctx, proxyStaticFilesVolume)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create static files volume")
+	}
+
+	err = p.dockerClient.CreateVolume(ctx, proxyConfigVolume)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create config volume")
+	}
+
 	err = p.dockerClient.PullImage(ctx, caddyImageName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to pull caddy image")
@@ -81,17 +93,19 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 
 	bindVolumes := []string{
 		fmt.Sprintf("%s:/etc/caddy/Caddyfile", defaultConfigPath),
-		"/var/caddy/share/:/var/caddy/share",
-		"/var/sarabi/data/caddy_data:/caddy_data",
+	}
+	mounts := map[string]string{
+		proxyStaticFilesVolume: "/var/caddy/share/",
+		proxyConfigVolume:      "/caddy_data",
 	}
 
 	params := docker.StartContainerParams{
 		Image:        caddyImageName,
 		Container:    ProxyServerName,
-		Network:      "",
 		Volumes:      bindVolumes,
 		ExposedPorts: exposedPorts,
 		PortBindings: portBindings,
+		Mounts:       mounts,
 	}
 	result, err := p.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {

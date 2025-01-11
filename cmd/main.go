@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sarabi"
 	"sarabi/internal/bundler"
 	proxycomponent "sarabi/internal/components/proxy"
 	"sarabi/internal/database"
@@ -19,6 +18,7 @@ import (
 	dockerclient "sarabi/internal/integrations/docker"
 	"sarabi/internal/logs"
 	"sarabi/internal/manager"
+	"sarabi/internal/misc"
 	"sarabi/internal/service"
 	"sarabi/internal/storage"
 	"sarabi/logger"
@@ -46,7 +46,7 @@ func main() {
 	}()
 
 	done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
 
 	<-done
 	log.Println("Shutting down...")
@@ -65,7 +65,7 @@ func main() {
 }
 
 func setup() (*http.Server, error, func() error) {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	docker, err := dockerclient.NewClient()
 	if err != nil {
 		return nil, err, nil
@@ -87,7 +87,7 @@ func setup() (*http.Server, error, func() error) {
 	naRepository := database.NewNetworkAccessRepository(db)
 	logsRepository := database.NewLogsRepository(db)
 
-	encryptor := sarabi.NewEncryptor()
+	encryptor := misc.NewEncryptor()
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
 	caddyClient := caddy.NewClient()
@@ -105,7 +105,7 @@ func setup() (*http.Server, error, func() error) {
 	}
 
 	caddyProxy := proxycomponent.New(docker, appService, caddyClient)
-	result, err := caddyProxy.Run(ctx, uuid.Nil)
+	_, err = caddyProxy.Run(ctx, uuid.Nil)
 	if err != nil {
 		return nil, err, nil
 	}
@@ -131,7 +131,8 @@ func setup() (*http.Server, error, func() error) {
 			}
 
 			cancel()
-			return caddyProxy.Cleanup(context.Background(), result)
+			// return caddyProxy.Cleanup(context.Background(), result)
+			return nil
 		}
 }
 
