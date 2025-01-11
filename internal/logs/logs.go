@@ -10,13 +10,14 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"os"
-	"sarabi"
 	"sarabi/internal/database"
 	"sarabi/internal/integrations/docker"
+	"sarabi/internal/misc"
 	"sarabi/internal/service"
 	"sarabi/internal/storage"
 	"sarabi/internal/types"
 	"sarabi/logger"
+	"strings"
 	"sync"
 	"time"
 )
@@ -70,6 +71,11 @@ func NewManager(
 }
 
 func (m *manager) Watch(ctx context.Context) {
+	if err := m.restoreStreaming(ctx); err != nil {
+		logger.Error("failed to restore streaming",
+			zap.Error(err))
+	}
+
 	evChan, errChan := m.dockerClient.ContainerEvents(ctx)
 	for {
 		select {
@@ -95,7 +101,6 @@ func (m *manager) tryReconnect(ctx context.Context) (<-chan events.Message, <-ch
 
 func (m *manager) handleContainerEvent(ctx context.Context, ev events.Message) {
 	if !supportedActions[string(ev.Action)] {
-		logger.Info("ignoring event", zap.Any("action", ev.Action))
 		return
 	}
 
@@ -105,7 +110,7 @@ func (m *manager) handleContainerEvent(ctx context.Context, ev events.Message) {
 		return
 	}
 
-	identity, err := sarabi.ParseContainerIdentity(ev.Actor.ID, containerName)
+	identity, err := misc.ParseContainerIdentity(ev.Actor.ID, containerName)
 	if err != nil {
 		logger.Error("error parsing container name",
 			zap.Error(err),
@@ -303,7 +308,7 @@ func (m *manager) Read(ctx context.Context, applicationID uuid.UUID, filter type
 }
 
 func (m *manager) Register(applicationID uuid.UUID, environment string) <-chan LogEntry {
-	ch := make(chan LogEntry)
+	ch := make(chan LogEntry, 100)
 	m.clientsMu.Lock()
 	defer m.clientsMu.Unlock()
 
@@ -365,4 +370,34 @@ func (m *manager) getStorage(ctx context.Context, applicationID uuid.UUID, st st
 	default:
 		return nil, errors.New("unknown storage type")
 	}
+}
+
+func (m *manager) restoreStreaming(ctx context.Context) error {
+	all, err := m.dockerClient.ListContainers(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to list containers")
+	}
+
+	logger.Info("restoring streaming for containers", zap.Any("containers", all))
+
+	for _, c := range all {
+		if c.State == "running" {
+			identity, err := misc.ParseContainerIdentity(c.ID, strings.Replace(c.Name, "/", "", 1))
+			if err != nil {
+				logger.Error("error parsing container name",
+					zap.Error(err),
+					zap.String("container_name", c.Name))
+				continue
+			}
+
+			go func(ctx context.Context, id *types.ContainerIdentity) {
+				if err := m.startStreaming(ctx, id); err != nil {
+					logger.Error("startStreaming: container log streaming error",
+						zap.Error(err))
+				}
+			}(ctx, identity)
+		}
+	}
+
+	return nil
 }
