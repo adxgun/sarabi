@@ -16,7 +16,7 @@ func NewRollbackCmd(svc api.Service) *cobra.Command {
 		Use:     "rollback",
 		Short:   "Rollback to a previous deployment",
 		Long:    "Rollback to a previous deployment using the deployment 'identifier'",
-		Example: "floki rollback --identifier <deployment_identifier>",
+		Example: "sarabi rollback --identifier <deployment_identifier>",
 		Run: func(cmd *cobra.Command, args []string) {
 			identifier = strings.TrimSpace(identifier)
 			if len(identifier) != 10 {

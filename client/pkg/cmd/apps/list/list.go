@@ -15,7 +15,7 @@ func NewListAppsCmd(svc api.Service) *cobra.Command {
 		Use:     "list",
 		Short:   "List applications",
 		Long:    "List all the applications on your sarabi server",
-		Example: "floki apps list",
+		Example: "sarabi apps list",
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.StartLoading("Working...")
 			defer cmdutil.StopLoading()

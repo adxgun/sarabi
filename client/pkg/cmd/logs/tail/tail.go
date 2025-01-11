@@ -17,7 +17,7 @@ func NewTailLogsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 		Use:     "tail",
 		Short:   "Tail logs",
 		Long:    "Tail logs of an application, use --env flag to specify the environment",
-		Example: "floki logs tail --env production",
+		Example: "sarabi logs tail --env production",
 		Run: func(cmd *cobra.Command, args []string) {
 			if environment == "" {
 				cmdutil.PrintE("environment is required")
@@ -41,13 +41,10 @@ func NewTailLogsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 			for scanner.Scan() {
 				entry := api.LogEntry{}
 				if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-					cmdutil.PrintE(err.Error())
-					return
+					continue
 				}
 
 				cmdutil.Print(entry.Owner + " " + entry.Log)
-				cmdutil.Print("\n")
-				cmdutil.Print("\n")
 			}
 		},
 	}

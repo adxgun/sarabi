@@ -29,8 +29,8 @@ func New() (*cobra.Command, error) {
 
 	svc := api.NewService(apiClient)
 	cmd := &cobra.Command{
-		Use:   "floki",
-		Short: "floki - the fullstack application deployment tool",
+		Use:   "sarabi",
+		Short: "sarabi - the fullstack application deployment tool",
 	}
 
 	cmd.AddCommand(apps.NewAppsCmd(svc))

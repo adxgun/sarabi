@@ -11,7 +11,7 @@ func NewLogsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "logs <command>",
 		Aliases: []string{"l"},
-		Short:   "Manage floki applications logs",
+		Short:   "Manage sarabi applications logs",
 		Long:    "Tail logs, view logs",
 		Run:     func(cmd *cobra.Command, args []string) {},
 	}

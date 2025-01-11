@@ -13,7 +13,7 @@ func NewBackupCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "backup <command>",
 		Aliases: []string{"bc"},
-		Short:   "Manage floki applications backup",
+		Short:   "Manage sarabi applications backup",
 		Long:    "Create view, delete applications database backup settings. Download a specific backup file",
 		Run: func(cmd *cobra.Command, args []string) {
 		},

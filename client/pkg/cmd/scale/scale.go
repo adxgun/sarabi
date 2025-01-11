@@ -16,8 +16,8 @@ func NewScaleAppCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "scale",
 		Short:   "Scale backend instances",
-		Long:    "Use this command to increase/decrease the number of running backend instances for a specific app in your floki server",
-		Example: "floki scale --env <environment> --replicas <number_of_replicas>",
+		Long:    "Use this command to increase/decrease the number of running backend instances for a specific app in your sarabi server",
+		Example: "sarabi scale --env <environment> --replicas <number_of_replicas>",
 		Run: func(cmd *cobra.Command, args []string) {
 			if environment == "" {
 				cmdutil.PrintE("Please specify environment")

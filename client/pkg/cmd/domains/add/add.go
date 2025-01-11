@@ -6,10 +6,10 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"sarabi"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/cmdutil"
 	"sarabi/client/internal/config"
+	"sarabi/internal/misc"
 	"time"
 )
 
@@ -21,7 +21,7 @@ func NewAddDomainCmd(svc api.Service, cfg config.Config) *cobra.Command {
 		Use:     "add",
 		Short:   "Add a domain to an application",
 		Long:    "Add the specified domain to an application. You must specify the environment and the instance you want to apply the domain to, e.g 'dev.app.io dev backend'",
-		Example: "floki domain add dev.app.io --env staging --instance backend",
+		Example: "sarabi domain add dev.app.io --env staging --instance backend",
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) <= 0 {
 				cmdutil.PrintE("please input your FQDN")
@@ -44,7 +44,7 @@ func NewAddDomainCmd(svc api.Service, cfg config.Config) *cobra.Command {
 				return
 			}
 
-			if !sarabi.StrContains(param.Instance, []string{"backend", "frontend"}) {
+			if !misc.StrContains(param.Instance, []string{"backend", "frontend"}) {
 				cmdutil.PrintE(fmt.Sprintf("Instance type must be backend or frontend: received unknown value %s", param.Instance))
 				return
 			}

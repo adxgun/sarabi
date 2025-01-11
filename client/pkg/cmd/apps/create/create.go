@@ -11,10 +11,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sarabi"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/cmdutil"
 	"sarabi/client/internal/config"
+	"sarabi/internal/misc"
 	"time"
 )
 
@@ -76,7 +76,7 @@ func NewCreateAppCmd(svc api.Service) *cobra.Command {
 
 			for i, _ := range selectedEngines {
 				value := storageEngines[i]
-				if sarabi.StrContains(value, []string{
+				if misc.StrContains(value, []string{
 					"None", "Done",
 				}) {
 					continue

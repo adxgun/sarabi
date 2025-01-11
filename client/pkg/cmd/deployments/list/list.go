@@ -20,7 +20,7 @@ func NewListDeploymentsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 		Use:     "list",
 		Short:   "List all deployments for an application",
 		Long:    "List all the deployments for the specified application. This command will show you all the running instances for backend, all the databases and the frontend of your application",
-		Example: "floki deployments list --type <instance_type> --env <environment>",
+		Example: "sarabi deployments list --type <instance_type> --env <environment>",
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.StartLoading("Working...")
 			defer cmdutil.StopLoading()

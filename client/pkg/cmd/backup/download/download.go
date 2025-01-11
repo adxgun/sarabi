@@ -15,8 +15,8 @@ func NewDownloadBackupCmd(svc api.Service) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "download",
 		Short:   "Download a backup",
-		Long:    "Download a database backup file from the storage. You can use the backup ID to download a specific backup. To see the list of backups, use 'floki backup list'",
-		Example: "floki backup download --id <backup_id> --location <location>",
+		Long:    "Download a database backup file from the storage. You can use the backup ID to download a specific backup. To see the list of backups, use 'sarabi backup list'",
+		Example: "sarabi backup download --id <backup_id> --location <location>",
 		Run: func(cmd *cobra.Command, args []string) {
 			backupID, err := uuid.Parse(id)
 			if err != nil {
