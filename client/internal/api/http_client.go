@@ -27,8 +27,9 @@ type (
 
 	Client interface {
 		Do(ctx context.Context, param Params) error
-		DoMultipart(ctx context.Context, files []MultipartFile, params Params) error
+		DoMultipart(ctx context.Context, files []MultipartFile, params Params) (io.ReadCloser, error)
 		Download(ctx context.Context, param Params) (io.ReadCloser, error)
+		SSE(ctx context.Context, param Params) (io.ReadCloser, error)
 	}
 
 	client struct {
@@ -99,10 +100,10 @@ func (c client) Do(ctx context.Context, param Params) error {
 	return nil
 }
 
-func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params Params) error {
+func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params Params) (io.ReadCloser, error) {
 	jsonBytes, err := json.Marshal(params.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	body := &bytes.Buffer{}
@@ -110,55 +111,42 @@ func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params P
 
 	jsonPart, err := writer.CreateFormField("json")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_, err = jsonPart.Write(jsonBytes)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, nextFile := range files {
 		filePart, err := writer.CreateFormFile("files", nextFile.Name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		_, err = io.Copy(filePart, nextFile.Content)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	err = writer.Close()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	requestUrl := c.baseUrl + params.Path
 	req, err := http.NewRequestWithContext(ctx, params.Method, requestUrl, body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode > 300 {
-		return c.parseError(responseBody)
-	}
-
-	if err := json.Unmarshal(responseBody, &params.Response); err != nil {
-		return err
-	}
-	return nil
+	return resp.Body, nil
 }
 
 func (c client) Download(ctx context.Context, param Params) (io.ReadCloser, error) {
@@ -185,9 +173,36 @@ func (c client) Download(ctx context.Context, param Params) (io.ReadCloser, erro
 		return nil, err
 	}
 
-	/*if resp.StatusCode < 200 || resp.StatusCode > 300 {
+	if resp.StatusCode < 200 || resp.StatusCode > 300 {
 		return nil, c.parseError([]byte("error"))
-	}*/
+	}
+
+	return resp.Body, nil
+}
+
+func (c client) SSE(ctx context.Context, param Params) (io.ReadCloser, error) {
+	sseUrl, err := url.Parse(c.baseUrl + param.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(param.QueryParams) > 0 {
+		values := url.Values{}
+		for k, v := range param.QueryParams {
+			values.Add(k, v)
+		}
+		sseUrl.RawQuery = values.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, param.Method, sseUrl.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
 
 	return resp.Body, nil
 }

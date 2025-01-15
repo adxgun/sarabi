@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sarabi/internal/components"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
 	service2 "sarabi/internal/service"
@@ -21,16 +22,22 @@ type databaseComponent struct {
 	secretService service2.SecretService
 	caddyClient   caddy.Client
 	dbProvider    Provider
+	eb            eventbus.Bus
 }
 
-func New(dc docker.Docker, appSvc service2.ApplicationService, secretService service2.SecretService,
-	dbProvider Provider, caddyClient caddy.Client) components.Builder {
+func New(dc docker.Docker,
+	appSvc service2.ApplicationService,
+	secretService service2.SecretService,
+	dbProvider Provider,
+	caddyClient caddy.Client,
+	eb eventbus.Bus) components.Builder {
 	return &databaseComponent{
 		dockerClient:  dc,
 		appService:    appSvc,
 		secretService: secretService,
 		dbProvider:    dbProvider,
 		caddyClient:   caddyClient,
+		eb:            eb,
 	}
 }
 
@@ -41,11 +48,13 @@ func (d *databaseComponent) Name() string {
 func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
 	logger.Info("running application component: database",
 		zap.String("dockerImage", d.dbProvider.Image()))
+
 	deployment, err := d.appService.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return nil, err
 	}
 
+	d.eb.Broadcast(deployment.Identifier, eventbus.Info, "Provisioning database: "+d.dbProvider.Image())
 	running, info, err := d.dockerClient.IsContainerRunning(ctx, d.dbProvider.ContainerName(deployment))
 	if err != nil {
 		return nil, err
@@ -121,6 +130,8 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	if err != nil {
 		return nil, err
 	}
+
+	d.eb.Broadcast(deployment.Identifier, eventbus.Success, "Database provisioning completed: "+d.dbProvider.Image())
 
 	return &components.BuilderResult{
 		ID:   startResp.ID,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/misc"
 	types "sarabi/internal/types"
 	"sarabi/logger"
@@ -27,10 +28,11 @@ type Client interface {
 
 type caddyClient struct {
 	httpClient HttpClient
+	eb         eventbus.Bus
 }
 
-func NewClient() Client {
-	return &caddyClient{httpClient: newCaddyHttpClient()}
+func NewClient(eb eventbus.Bus) Client {
+	return &caddyClient{httpClient: newCaddyHttpClient(), eb: eb}
 }
 
 func (c *caddyClient) Init(ctx context.Context) error {
@@ -54,6 +56,7 @@ func (c *caddyClient) Init(ctx context.Context) error {
 // ApplyConfig apply configuration for a specific instance type
 // it sends a request to get current caddy configuration, apply the patch and then update caddy with the new config
 func (c *caddyClient) ApplyConfig(ctx context.Context, instanceType types.InstanceType, deployment *types.Deployment) error {
+	c.eb.Broadcast(deployment.Identifier, eventbus.Info, fmt.Sprintf("Applying proxy configuration for %s...", deployment.InstanceType))
 	switch instanceType {
 	case types.InstanceTypeBackend:
 		return c.patchBackendConfig(ctx, deployment, "")

@@ -2,9 +2,11 @@ package docker
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	dockerclient "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -23,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"sarabi/internal/bundler"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/types"
 	"sarabi/logger"
 	"strings"
@@ -51,9 +54,10 @@ type Docker interface {
 
 type dockerClient struct {
 	hostClient client.APIClient
+	eb         eventbus.Bus
 }
 
-func NewClient() (Docker, error) {
+func NewClient(eb eventbus.Bus) (Docker, error) {
 	hostClient, err := client.NewClientWithOpts(client.FromEnv,
 		client.WithAPIVersionNegotiation(), client.WithTimeout(10*time.Minute))
 	if err != nil {
@@ -67,15 +71,17 @@ func NewClient() (Docker, error) {
 
 	logger.Info("docker client connected",
 		zap.Any("properties", p))
-	return &dockerClient{hostClient: hostClient}, nil
+	return &dockerClient{hostClient: hostClient, eb: eb}, nil
 }
 
 func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error) {
+	d.eb.Broadcast(application.Identifier, eventbus.Info, "Creating Docker build context...")
 	buildCtx, err := bundler.CreateBuildContextFromTar(application.BinPath())
 	if err != nil {
 		return BuildImageResult{}, err
 	}
 
+	d.eb.Broadcast(application.Identifier, eventbus.Info, fmt.Sprintf("Building image...%s:%s", application.Application.Name, application.Environment))
 	imageName := application.ImageName()
 	response, err := d.hostClient.ImageBuild(ctx, &buildCtx, dockerclient.ImageBuildOptions{
 		Tags:        []string{imageName},
@@ -89,19 +95,33 @@ func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deploy
 	defer func() {
 		_ = response.Body.Close()
 	}()
-	resp, err := readRemoteResponse(response.Body)
-	if err != nil {
-		return BuildImageResult{}, err
-	}
-	for _, next := range resp {
+
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		nextLine := scanner.Text()
+		next := &RemoteResponse{}
+		if err := json.Unmarshal(scanner.Bytes(), next); err != nil {
+			logger.Warn("error parsing docker build response",
+				zap.String("line", nextLine))
+			continue
+		}
+
 		if next.ErrorDetails != nil {
-			return BuildImageResult{}, fmt.Errorf("code: %d, message: %s", next.ErrorDetails.Code, next.ErrorDetails.Message)
+			errMsg := fmt.Errorf("code: %d, message: %s", next.ErrorDetails.Code, next.ErrorDetails.Message)
+			d.eb.Broadcast(application.Identifier, eventbus.Error, errMsg.Error())
+			return BuildImageResult{}, errMsg
 		}
 		if next.Stream != "" && strings.Contains(next.Stream, "successfully built") {
+			d.eb.Broadcast(application.Identifier, eventbus.Success, next.Stream)
 			return BuildImageResult{Name: imageName}, nil
+		} else {
+			d.eb.Broadcast(application.Identifier, eventbus.Info, next.Stream)
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		return BuildImageResult{}, err
+	}
 	return BuildImageResult{Name: imageName}, nil
 }
 

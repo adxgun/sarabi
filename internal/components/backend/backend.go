@@ -2,12 +2,14 @@ package backendcomponent
 
 import (
 	"context"
+	"fmt"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"sarabi/internal/components"
 	proxycomponent "sarabi/internal/components/proxy"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
 	"sarabi/internal/service"
@@ -21,16 +23,21 @@ type (
 		appService    service.ApplicationService
 		secretService service.SecretService
 		caddyClient   caddy.Client
+		eb            eventbus.Bus
 	}
 )
 
-func New(dc docker.Docker, appService service.ApplicationService,
-	sc service.SecretService, caddyClient caddy.Client) components.Builder {
+func New(dc docker.Docker,
+	appService service.ApplicationService,
+	sc service.SecretService,
+	caddyClient caddy.Client,
+	eb eventbus.Bus) components.Builder {
 	return &backendComponent{
 		dockerClient:  dc,
 		appService:    appService,
 		secretService: sc,
 		caddyClient:   caddyClient,
+		eb:            eb,
 	}
 }
 
@@ -72,6 +79,7 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 	g, ctx := errgroup.WithContext(ctx)
 	for idx := 0; idx < deployment.Instances; idx++ {
 		g.Go(func() error {
+			b.eb.Broadcast(deployment.Identifier, eventbus.Info, fmt.Sprintf("Starting application container: replicaID=%d", idx+1))
 			httpPort, _ := nat.NewPort("tcp", deployment.Port)
 			networkName := deployment.NetworkName()
 			params := docker.StartContainerParams{
@@ -100,6 +108,7 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 	}
 
 	if err := g.Wait(); err != nil {
+		b.eb.Broadcast(deployment.Identifier, eventbus.Error, "Failed to start application container: "+err.Error())
 		return nil, err
 	}
 

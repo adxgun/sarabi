@@ -12,6 +12,7 @@ import (
 	"sarabi/internal/bundler"
 	proxycomponent "sarabi/internal/components/proxy"
 	"sarabi/internal/database"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/firewall"
 	"sarabi/internal/httphandlers"
 	"sarabi/internal/integrations/caddy"
@@ -65,8 +66,9 @@ func main() {
 }
 
 func setup() (*http.Server, error, func() error) {
+	eventBus := eventbus.New()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	docker, err := dockerclient.NewClient()
+	docker, err := dockerclient.NewClient(eventBus)
 	if err != nil {
 		return nil, err, nil
 	}
@@ -90,7 +92,7 @@ func setup() (*http.Server, error, func() error) {
 	encryptor := misc.NewEncryptor()
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
-	caddyClient := caddy.NewClient()
+	caddyClient := caddy.NewClient(eventBus)
 	domainService := service.NewDomainService(caddyClient, domainRepo)
 	fm := firewall.NewManager()
 	logsManager := logs.NewManager(docker, appService, logsRepository, secretService)
@@ -115,8 +117,8 @@ func setup() (*http.Server, error, func() error) {
 	}()
 
 	mn := manager.New(appService, secretService, docker, caddyClient,
-		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository)
-	apiHandler := httphandlers.NewApiHandler(mn, logsManager)
+		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository, eventBus)
+	apiHandler := httphandlers.NewApiHandler(mn, logsManager, eventBus)
 	routes := httphandlers.Routes(apiHandler)
 
 	addr := ":3646"
@@ -135,141 +137,3 @@ func setup() (*http.Server, error, func() error) {
 			return nil
 		}
 }
-
-/*
-func _main() {
-	if err := logger.InitLogger("development"); err != nil {
-		fmt.Printf("Error initializing logger: %v\n", err)
-		return
-	}
-	defer logger.Sync()
-
-	backendSourceDir := "/Users/lekanadigun/github/adigunhammedolalekan/fspasssample"
-	// sourceDir := "/Users/lekanadigun/Documents/engine"
-	buildFile := "example-app.tar.gz"
-	dbDir := "fspaas.db"
-	frontendSourceDir := "/Users/lekanadigun/Documents/frontend/dist"
-	frontendBuildFile := "frontend-app.tar.gz"
-	db, err := database.Open(dbDir)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := sarabi.GzipDirectory(backendSourceDir, buildFile); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := sarabi.GzipDirectory(frontendSourceDir, frontendBuildFile); err != nil {
-		log.Fatal(err)
-	}
-
-	docker, err := docker2.NewClient()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("initialized Docker!")
-
-	deploymentRepo := database.NewDeploymentRepository(db)
-	deploymentSecretRepo := database.NewDeploymentSecretRepository(db)
-	appRepo := database.NewApplicationRepository(db)
-	secretRepo := database.NewSecretRepository(db)
-	encryptor := sarabi.NewEncryptor()
-	appService := service.NewApplicationService(appRepo, deploymentRepo)
-	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo)
-	caddyClient := caddy.NewClient(appService)
-	ctx := context.Background()
-
-	app, err := appService.Create(context.Background(), types.CreateApplicationParams{
-		Name:   "frontend-test-0",
-		Name: "paas.local",
-	})
-
-	if err != nil {
-		logger.Warn("failed to schedule app", zap.Error(err))
-	}
-	logger.Info("app created", zap.Any("app", app))
-
-	deployment := &types.Deployment{
-		ID:            uuid.New(),
-		ApplicationID: app.ID,
-		Environment:   "dev",
-		Status:        "CREATED",
-		BuildDir:      buildFile,
-		Instances:     2,
-		Application:   *app,
-		Port:          "1995",
-	}
-
-	deploymentFrontend := &types.Deployment{
-		ID:            uuid.New(),
-		ApplicationID: app.ID,
-		Environment:   "dev",
-		Status:        "CREATED",
-		BuildDir:      frontendBuildFile,
-		Instances:     1,
-		Application:   *app,
-	}
-
-	err = deploymentRepo.Save(ctx, deploymentFrontend)
-	err = deploymentRepo.Save(ctx, deployment)
-	if err != nil {
-		log.Fatal("failed to schedule deployment")
-	}
-
-	logger.Info("deployment created", zap.Any("deployment", deployment))
-
-	dbSecrets := []*types.Secret{
-		{Name: "POSTGRES_DB", Value: app.Name, ID: uuid.New()},
-		{Name: "POSTGRES_PASSWORD", Value: uuid.New().String(), ID: uuid.New()},
-		{Name: "POSTGRES_USER", Value: app.Name + "-user", ID: uuid.New()},
-		{Name: "DATABASE_HOST", Value: deployment.DBInstanceName(), ID: uuid.New()},
-		{Name: "DATABASE_PORT", Value: "5432", ID: uuid.New()},
-		{Name: "PORT", Value: deployment.Port, ID: uuid.New()},
-	}
-
-	createdSecrets := make([]*types.Secret, 0)
-	for _, ss := range dbSecrets {
-		v, err := secretService.Create(context.Background(), app.ID, ss.Name, ss.Value, "dev")
-		if err != nil {
-			logger.Error("failed to schedule secret", zap.Error(err))
-		} else {
-			logger.Info("secret created", zap.Any("secret", v))
-			createdSecrets = append(createdSecrets, v)
-		}
-	}
-
-	err = secretService.CreateDeploymentSecrets(ctx, deployment.ID, createdSecrets)
-	if err != nil {
-		log.Fatal("failed to schedule deployment secret", err)
-	}
-
-	fsComponents := []components.Builder{
-		databasecomponent.New(docker, appService, secretService),
-		proxycomponent.New(docker, appService, caddyClient),
-		backendcomponent.New(docker, appService, secretService, caddyClient),
-		frontendcomponent.New(docker, appService, secretService, caddyClient),
-	}
-
-	for _, fsC := range fsComponents {
-		r, err := fsC.Run(ctx, deployment.ID)
-		if err != nil {
-			logger.Error("failed to start component",
-				zap.Error(err),
-				zap.String("name", fsC.Name()))
-		} else {
-			logger.Info("component started",
-				zap.String("name", fsC.Name()),
-				zap.Any("result", r))
-		}
-
-		if err := fsC.Cleanup(ctx, r); err != nil {
-			logger.Error("cleanup failed",
-				zap.Error(err))
-		} else {
-			logger.Info("cleanup completed!",
-				zap.Any("result", r))
-		}
-	}
-}
-*/

@@ -13,6 +13,10 @@ import (
 	"strings"
 )
 
+var (
+	Seperator = []byte("\n\n")
+)
+
 // StrContains returns true if "str" is in "values"
 // e.g "a" in "a,b,c" => true
 func StrContains(str string, values []string) bool {

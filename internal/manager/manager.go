@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	databasecomponent "sarabi/internal/components/database"
 	frontendcomponent "sarabi/internal/components/frontend"
 	"sarabi/internal/database"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/firewall"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
@@ -44,7 +46,7 @@ type (
 		ValidateToken(ctx context.Context, token string) error
 		CreateApplication(ctx context.Context, param types.CreateApplicationParams) (*types.Application, error)
 		GetApplication(ctx context.Context, applicationID *uuid.UUID, name *string) (*types.Application, error)
-		Deploy(ctx context.Context, param *types.DeployParams) (*types.DeployResponse, error)
+		Deploy(ctx context.Context, param *types.DeployParams) error
 		Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error
 		Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error)
@@ -72,6 +74,7 @@ type manager struct {
 	backupService   service.BackupService
 	firewallManager firewall.Manager
 	naRepository    database.NetworkAccessRepository
+	eventBus        eventbus.Bus
 }
 
 func New(
@@ -83,7 +86,8 @@ func New(
 	dms service.DomainService,
 	backup service.BackupService,
 	fm firewall.Manager,
-	naRepository database.NetworkAccessRepository) Manager {
+	naRepository database.NetworkAccessRepository,
+	eb eventbus.Bus) Manager {
 	return &manager{
 		appService:      applicationService,
 		secretService:   secretService,
@@ -94,6 +98,7 @@ func New(
 		backupService:   backup,
 		firewallManager: fm,
 		naRepository:    naRepository,
+		eventBus:        eb,
 	}
 }
 
@@ -139,44 +144,41 @@ func (m *manager) GetApplication(ctx context.Context, applicationID *uuid.UUID, 
 	return app, nil
 }
 
-func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types.DeployResponse, error) {
+func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
 	var backendDeployment *types.Deployment
 	var frontendDeployment *types.Deployment
 	var feDomains []string
 	var beDomains []string
 
+	m.eventBus.Broadcast(param.Identifier, eventbus.Info, "Starting deployment...")
+
 	app, err := m.appService.Get(ctx, param.ApplicationID)
 	if err != nil {
-		return nil, err
-	}
-
-	identifier, err := misc.DefaultRandomIdGenerator.Generate(10)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if param.Backend != nil {
 		for _, se := range app.StorageEngines {
 			dbPort, err := misc.DefaultPortGenerator.Generate()
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			dbDeployment, err := m.appService.CreateDeployment(ctx, types.CreateDeploymentParams{
 				ApplicationID: param.ApplicationID,
 				Environment:   param.Environment,
 				InstanceType:  types.InstanceTypeDatabase,
-				Identifier:    identifier,
+				Identifier:    param.Identifier,
 				Port:          dbPort,
 				Instances:     1,
 			})
 			if err != nil {
-				return nil, errorpkg.Wrap(err, "failed to schedule database deployment")
+				return errorpkg.Wrap(err, "failed to schedule database deployment")
 			}
 			dbComponent := databasecomponent.New(m.dockerClient, m.appService,
-				m.secretService, databasecomponent.NewProvider(se), m.caddyClient)
+				m.secretService, databasecomponent.NewProvider(se), m.caddyClient, m.eventBus)
 			if _, err := dbComponent.Run(ctx, dbDeployment.ID); err != nil {
-				return nil, errorpkg.Wrap(err, "failed to run database component")
+				return errorpkg.Wrap(err, "failed to run database component")
 			}
 
 			go func(dPort string, fm firewall.Manager) {
@@ -192,12 +194,12 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		}
 
 		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval, false); err != nil {
-			return nil, errorpkg.Wrap(err, "failed to initialize auto-backup")
+			return errorpkg.Wrap(err, "failed to initialize auto-backup")
 		}
 
 		appPort, err := misc.DefaultPortGenerator.Generate()
 		if err != nil {
-			return nil, errorpkg.Wrap(err, "failed to allocate port")
+			return errorpkg.Wrap(err, "failed to allocate port")
 		}
 
 		createBackend := types.CreateDeploymentParams{
@@ -206,19 +208,19 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 			Instances:     param.Instances,
 			Port:          appPort,
 			InstanceType:  types.InstanceTypeBackend,
-			Identifier:    identifier,
+			Identifier:    param.Identifier,
 		}
 		backendDeployment, err = m.appService.CreateDeployment(ctx, createBackend)
 		if err != nil {
-			return nil, errorpkg.Wrap(err, "failed to save backend deployment")
+			return errorpkg.Wrap(err, "failed to save backend deployment")
 		}
 
 		if err := m.store.Save(ctx, param.Backend, backendDeployment); err != nil {
-			return nil, errorpkg.Wrap(err, "failed to save backend artifact")
+			return errorpkg.Wrap(err, "failed to save backend artifact")
 		}
 
 		if err := m.setupAppVariables(ctx, backendDeployment); err != nil {
-			return nil, errorpkg.Wrap(err, "failed to setup app variables")
+			return errorpkg.Wrap(err, "failed to setup app variables")
 		}
 	}
 
@@ -228,23 +230,23 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 			Environment:   param.Environment,
 			Instances:     param.Instances,
 			InstanceType:  types.InstanceTypeFrontend,
-			Identifier:    identifier,
+			Identifier:    param.Identifier,
 		}
 		fd, err := m.appService.CreateDeployment(ctx, createFrontend)
 		if err != nil {
-			return nil, errorpkg.Wrap(err, "failed to schedule frontend deployment")
+			return errorpkg.Wrap(err, "failed to schedule frontend deployment")
 		}
 		if err := m.store.Save(ctx, param.Frontend, fd); err != nil {
-			return nil, errorpkg.Wrap(err, "failed to save frontend artifact")
+			return errorpkg.Wrap(err, "failed to save frontend artifact")
 		}
 		frontendDeployment = fd
 	}
 
 	if backendDeployment != nil {
-		backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+		backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient, m.eventBus)
 		result, err := backend.Run(ctx, backendDeployment.ID)
 		if err != nil {
-			return nil, errorpkg.Wrap(err, "failed to run backend component")
+			return errorpkg.Wrap(err, "failed to run backend component")
 		}
 
 		if err := backend.Cleanup(ctx, result); err != nil {
@@ -254,10 +256,10 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 	}
 
 	if frontendDeployment != nil {
-		frontend := frontendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+		frontend := frontendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient, m.eventBus)
 		result, err := frontend.Run(ctx, frontendDeployment.ID)
 		if err != nil {
-			return nil, errorpkg.Wrap(err, "failed to frontend component")
+			return errorpkg.Wrap(err, "failed to frontend component")
 		}
 		if err := frontend.Cleanup(ctx, result); err != nil {
 			logger.Warn("cleanup failed: ", zap.Error(err))
@@ -267,7 +269,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 
 	domains, err := m.domainService.FindByApplicationID(ctx, param.ApplicationID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, do := range domains {
@@ -279,13 +281,16 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) (*types
 		}
 	}
 
-	return &types.DeployResponse{
-		Identifier: identifier,
+	resp := &types.DeployResponse{
+		Identifier: param.Identifier,
 		AccessURL: types.AccessURL{
 			Frontend: feDomains,
 			Backend:  beDomains,
 		},
-	}, nil
+	}
+	data, _ := json.Marshal(resp)
+	m.eventBus.BroadcastWithData(param.Identifier, eventbus.Complete, "Success: Deployment completed", data)
+	return nil
 }
 
 func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {
@@ -346,7 +351,7 @@ func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, 
 		return err
 	}
 
-	backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+	backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient, m.eventBus)
 	r, err := backend.Run(ctx, newBackendDeployment.ID)
 	if err != nil {
 		return err
@@ -426,7 +431,7 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 			return nil, err
 		}
 
-		backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+		backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient, m.eventBus)
 		r, err := backend.Run(ctx, newBeDeployment.ID)
 		if err != nil {
 			return nil, err
@@ -455,7 +460,7 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 			return nil, err
 		}
 
-		frontend := frontendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+		frontend := frontendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient, m.eventBus)
 		r, err := frontend.Run(ctx, newFeDeployment.ID)
 		if err != nil {
 			return nil, err
@@ -533,7 +538,7 @@ func (m *manager) Scale(ctx context.Context, applicationID uuid.UUID, environmen
 		return nil, err
 	}
 
-	backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient)
+	backend := backendcomponent.New(m.dockerClient, m.appService, m.secretService, m.caddyClient, m.eventBus)
 	r, err := backend.Run(ctx, newBeDeployment.ID)
 	if err != nil {
 		return nil, err

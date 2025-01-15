@@ -2,17 +2,18 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/cobra"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/cmdutil"
 	"sarabi/client/internal/config"
 	"sarabi/internal/bundler"
 	"strings"
-	"time"
 )
 
 func NewDeployCmd(svc api.Service, cfg config.Config) *cobra.Command {
@@ -82,23 +83,22 @@ func NewDeployCmd(svc api.Service, cfg config.Config) *cobra.Command {
 
 			cmdutil.StopLoading()
 
-			cmdutil.StartLoading("Deploying...")
-			defer cmdutil.StopLoading()
-
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer cancel()
+
 			resp, err := svc.Deploy(ctx, frontend, backend, *deployParams)
 			if err != nil {
 				cmdutil.PrintE(err.Error())
 				return
 			}
 
-			cmdutil.PrintS("Deployment succeeded! Identifier: " + resp.Identifier)
-			if len(resp.AccessURL.Backend) > 0 {
-				cmdutil.Print("Backend: " + strings.Join(resp.AccessURL.Backend, " | "))
-			}
-			if len(resp.AccessURL.Frontend) > 0 {
-				cmdutil.Print("Frontend: " + strings.Join(resp.AccessURL.Frontend, " | "))
+			for {
+				select {
+				case ev := <-resp:
+					handleDeployEvent(ev, cancel)
+				case <-ctx.Done():
+					return
+				}
 			}
 		},
 	}
@@ -106,4 +106,30 @@ func NewDeployCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	cmd.Flags().StringVarP(&deployParams.Environment, "env", "e", "", "Environment you're targeting for deployment")
 	cmd.Flags().IntVarP(&deployParams.Instances, "replicas", "i", 1, "Total number of replicas to run")
 	return cmd
+}
+
+func handleDeployEvent(ev api.Event, cancel context.CancelFunc) {
+	switch ev.Type {
+	case api.Info:
+		cmdutil.Print(strings.Trim(ev.Message, "\n"))
+	case api.Error:
+		cancel()
+		cmdutil.PrintE(strings.Trim(ev.Message, "\n"))
+	case api.Success:
+		cmdutil.PrintS(strings.Trim(ev.Message, "\n"))
+	case api.Complete:
+		cancel()
+		resp := api.DeployResponse{}
+		if err := json.Unmarshal(ev.Data, &resp); err != nil {
+			return
+		}
+
+		cmdutil.PrintS("Deployment succeeded! Identifier: " + resp.Identifier)
+		if len(resp.AccessURL.Backend) > 0 {
+			cmdutil.Print("Backend: " + strings.Join(resp.AccessURL.Backend, " | "))
+		}
+		if len(resp.AccessURL.Frontend) > 0 {
+			cmdutil.Print("Frontend: " + strings.Join(resp.AccessURL.Frontend, " | "))
+		}
+	}
 }

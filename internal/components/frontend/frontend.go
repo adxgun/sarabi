@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 	"sarabi/internal/bundler"
 	"sarabi/internal/components"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
 	"sarabi/internal/service"
@@ -19,16 +20,22 @@ type (
 		appService    service.ApplicationService
 		secretService service.SecretService
 		caddyClient   caddy.Client
+		eb            eventbus.Bus
 	}
 )
 
-func New(dockerClient docker.Docker, appService service.ApplicationService,
-	secretService service.SecretService, caddyClient caddy.Client) components.Builder {
+func New(
+	dockerClient docker.Docker,
+	appService service.ApplicationService,
+	secretService service.SecretService,
+	caddyClient caddy.Client,
+	eb eventbus.Bus) components.Builder {
 	return &frontendComponent{
 		dockerClient:  dockerClient,
 		appService:    appService,
 		secretService: secretService,
 		caddyClient:   caddyClient,
+		eb:            eb,
 	}
 }
 
@@ -41,6 +48,8 @@ func (f *frontendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	if err != nil {
 		return nil, err
 	}
+
+	f.eb.Broadcast(deployment.Identifier, eventbus.Info, "Deployment frontend...")
 
 	previousActives, err := f.appService.FindCurrentlyActiveDeployments(ctx, deployment.ApplicationID, types.InstanceTypeFrontend)
 	if err != nil {

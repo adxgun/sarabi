@@ -10,8 +10,10 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/logs"
 	"sarabi/internal/manager"
+	"sarabi/internal/misc"
 	"sarabi/internal/types"
 	"sarabi/logger"
 	"strings"
@@ -26,11 +28,12 @@ type (
 	ApiHandler struct {
 		mn manager.Manager
 		lm logs.Manager
+		eb eventbus.Bus
 	}
 )
 
-func NewApiHandler(mn manager.Manager, lm logs.Manager) *ApiHandler {
-	return &ApiHandler{mn: mn, lm: lm}
+func NewApiHandler(mn manager.Manager, lm logs.Manager, eb eventbus.Bus) *ApiHandler {
+	return &ApiHandler{mn: mn, lm: lm, eb: eb}
 }
 
 func (handler *ApiHandler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -67,10 +70,17 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	identifier, err := misc.DefaultRandomIdGenerator.Generate(10)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
 	param := &types.DeployParams{
 		ApplicationID: body.ApplicationID,
 		Instances:     body.Instances,
 		Environment:   body.Environment,
+		Identifier:    identifier,
 	}
 	for _, ff := range r.MultipartForm.File["files"] {
 		if !strings.HasSuffix(ff.Filename, ".tar.gz") {
@@ -100,19 +110,39 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	ch := handler.eb.Register(identifier)
+
 	logger.Info("starting deployment",
 		zap.Any("application_id", param.ApplicationID))
+	go func(ctx context.Context) {
+		err = handler.mn.Deploy(ctx, param)
+		if err != nil {
+			ch <- eventbus.Event{
+				Type:    eventbus.Error,
+				Message: err.Error(),
+			}
+		}
+	}(r.Context())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	for {
+		select {
+		case ev := <-ch:
+			data, err := json.Marshal(ev)
+			if err != nil {
+				serverError(w, err)
+				continue
+			}
 
-	resp, err := handler.mn.Deploy(ctx, param)
-	if err != nil {
-		serverError(w, errors.Wrap(err, "deployment failed"))
-		return
+			_, _ = w.Write(data)
+			_, _ = w.Write(misc.Seperator)
+			flusher, ok := w.(http.Flusher)
+			if ok {
+				flusher.Flush()
+			}
+		case <-r.Context().Done():
+			return
+		}
 	}
-
-	ok(w, "deployment succeeded", resp)
 }
 
 func (handler *ApiHandler) UpdateVariables(w http.ResponseWriter, r *http.Request) {

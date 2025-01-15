@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"github.com/google/uuid"
 	"time"
 )
@@ -104,6 +105,21 @@ type (
 		Owner string `json:"owner"`
 		Log   string `json:"log"`
 	}
+
+	Event struct {
+		Type    Type            `json:"type"`
+		Message string          `json:"message"`
+		Data    json.RawMessage `json:"data"`
+	}
+
+	Type string
+)
+
+const (
+	Error    Type = "error"
+	Info     Type = "info"
+	Success  Type = "success"
+	Complete Type = "complete"
 )
 
 func (b Backup) StorageTypeString() string {

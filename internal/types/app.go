@@ -89,6 +89,7 @@ type (
 		Backend       io.Reader
 		Instances     int
 		Environment   string
+		Identifier    string
 	}
 
 	CreateDeploymentParams struct {

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"io"
@@ -15,7 +17,7 @@ type (
 
 	ApplicationService interface {
 		CreateApplication(ctx context.Context, params CreateApplicationParams) (Application, error)
-		Deploy(ctx context.Context, frontend, backend io.Reader, params DeployParams) (DeployResponse, error)
+		Deploy(ctx context.Context, frontend, backend io.Reader, params DeployParams) (<-chan Event, error)
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, params UpdateVariablesParams) error
 		ListApplications(ctx context.Context) ([]Application, error)
 		Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error
@@ -57,7 +59,7 @@ func (s service) CreateApplication(ctx context.Context, params CreateApplication
 	return response.Application, err
 }
 
-func (s service) Deploy(ctx context.Context, frontend, backend io.Reader, params DeployParams) (DeployResponse, error) {
+func (s service) Deploy(ctx context.Context, frontend, backend io.Reader, params DeployParams) (<-chan Event, error) {
 	files := make([]MultipartFile, 0)
 	if frontend != nil {
 		files = append(files, MultipartFile{
@@ -82,12 +84,31 @@ func (s service) Deploy(ctx context.Context, frontend, backend io.Reader, params
 		Response: &response,
 	}
 
-	err := s.apiClient.DoMultipart(ctx, files, httpParams)
-	if err != nil {
-		return DeployResponse{}, err
-	}
+	ch := make(chan Event, 100)
+	go func() {
+		resp, err := s.apiClient.DoMultipart(ctx, files, httpParams)
+		if err != nil {
+			ch <- Event{
+				Type:    Error,
+				Message: err.Error(),
+			}
+			return
+		}
 
-	return response.Data, nil
+		sc := bufio.NewScanner(resp)
+		for sc.Scan() {
+			ev := &Event{}
+			if err := json.Unmarshal(sc.Bytes(), ev); err != nil {
+				continue
+			}
+
+			ch <- *ev
+		}
+
+		if err := sc.Err(); err != nil {
+		}
+	}()
+	return ch, nil
 }
 
 func (s service) UpdateVariables(ctx context.Context, applicationID uuid.UUID, params UpdateVariablesParams) error {
