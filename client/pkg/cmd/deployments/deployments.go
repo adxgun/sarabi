@@ -7,7 +7,7 @@ import (
 	"sarabi/client/pkg/cmd/deployments/list"
 )
 
-func NewDeploymentsCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewDeploymentsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "deployments <command>",
 		Aliases: []string{"d"},

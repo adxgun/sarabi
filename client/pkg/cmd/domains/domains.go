@@ -5,9 +5,10 @@ import (
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/config"
 	"sarabi/client/pkg/cmd/domains/add"
+	"sarabi/client/pkg/cmd/domains/remove"
 )
 
-func NewDomainsCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewDomainsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "domains <command>",
 		Short: "Manage sarabi application domains",
@@ -17,5 +18,6 @@ func NewDomainsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 	}
 
 	cmd.AddCommand(add.NewAddDomainCmd(svc, cfg))
+	cmd.AddCommand(remove.NewRemoveDomainCmd(svc, cfg))
 	return cmd
 }

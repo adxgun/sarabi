@@ -12,7 +12,7 @@ import (
 	"sarabi/client/internal/config"
 )
 
-func NewCreateBackupScheduleCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewCreateBackupScheduleCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	var environment string
 	var cronExpression string
 	cmd := &cobra.Command{

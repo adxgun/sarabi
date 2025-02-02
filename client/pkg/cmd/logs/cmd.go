@@ -7,7 +7,7 @@ import (
 	"sarabi/client/pkg/cmd/logs/tail"
 )
 
-func NewLogsCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewLogsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "logs <command>",
 		Aliases: []string{"l"},

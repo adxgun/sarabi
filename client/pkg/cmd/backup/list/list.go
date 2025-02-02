@@ -8,7 +8,7 @@ import (
 	"sarabi/client/internal/config"
 )
 
-func NewListBackupsCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewListBackupsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	var environment string
 	cmd := &cobra.Command{
 		Use:     "list",

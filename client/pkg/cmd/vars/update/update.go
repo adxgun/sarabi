@@ -1,7 +1,6 @@
 package update
 
 import (
-	"context"
 	"fmt"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
@@ -9,12 +8,10 @@ import (
 	"sarabi/client/internal/cmdutil"
 	"sarabi/client/internal/config"
 	"strings"
-	"time"
 )
 
-func NewUpdateVarsCmd(svc api.Service, cfg config.Config) *cobra.Command {
-	var environment string
-	var varFile string
+func NewUpdateVarsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
+	var environment, varFile string
 	var vars []string
 	params := &api.UpdateVariablesParams{}
 
@@ -50,15 +47,13 @@ func NewUpdateVarsCmd(svc api.Service, cfg config.Config) *cobra.Command {
 			cmdutil.StartLoading(fmt.Sprintf("updating variables...(%d)", len(params.Vars)))
 			defer cmdutil.StopLoading()
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
-			defer cancel()
-			err = svc.UpdateVariables(ctx, cfg.ApplicationID, *params)
+			err = svc.UpdateVariables(cmd.Context(), cfg.ApplicationID, *params)
 			if err != nil {
 				cmdutil.PrintE(err.Error())
 				return
 			}
 
-			cmdutil.PrintS("variable updated!")
+			cmdutil.PrintS("variables updated!")
 		},
 	}
 

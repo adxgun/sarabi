@@ -10,8 +10,7 @@ import (
 )
 
 func NewDownloadBackupCmd(svc api.Service) *cobra.Command {
-	var id string
-	var location string
+	var id, location string
 	cmd := &cobra.Command{
 		Use:     "download",
 		Short:   "Download a backup",

@@ -239,7 +239,7 @@ func createApp(svc api.Service, param api.CreateApplicationParams) (api.Applicat
 		return api.Application{}, err
 	}
 
-	cfg := config.Config{
+	cfg := config.ApplicationConfig{
 		ApplicationID: app.ID,
 		Frontend:      param.FePath,
 		Backend:       param.BePath,

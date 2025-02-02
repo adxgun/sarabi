@@ -1,7 +1,6 @@
 package add
 
 import (
-	"context"
 	"fmt"
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
@@ -10,10 +9,9 @@ import (
 	"sarabi/client/internal/cmdutil"
 	"sarabi/client/internal/config"
 	"sarabi/internal/misc"
-	"time"
 )
 
-func NewAddDomainCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewAddDomainCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	mValidator := validator.New(validator.WithRequiredStructEnabled())
 	param := &api.AddDomainParam{}
 
@@ -52,9 +50,7 @@ func NewAddDomainCmd(svc api.Service, cfg config.Config) *cobra.Command {
 			cmdutil.StartLoading("Working...")
 			defer cmdutil.StopLoading()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			err := svc.AddDomain(ctx, cfg.ApplicationID, *param)
+			err := svc.AddDomain(cmd.Context(), cfg.ApplicationID, *param)
 			if err != nil {
 				cmdutil.PrintE(err.Error())
 				return

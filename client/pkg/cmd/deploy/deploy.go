@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-func NewDeployCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewDeployCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	deployParams := &api.DeployParams{
 		Instances:     1,
 		ApplicationID: cfg.ApplicationID,

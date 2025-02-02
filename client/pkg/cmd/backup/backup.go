@@ -9,7 +9,7 @@ import (
 	"sarabi/client/pkg/cmd/backup/schedule"
 )
 
-func NewBackupCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewBackupCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "backup <command>",
 		Aliases: []string{"bc"},

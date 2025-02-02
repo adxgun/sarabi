@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func NewDestroyDeploymentCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewDestroyDeploymentCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	var environment string
 	cmd := &cobra.Command{
 		Use:     "destroy",

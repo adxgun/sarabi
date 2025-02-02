@@ -10,7 +10,7 @@ import (
 	"sarabi/client/internal/config"
 )
 
-func NewScaleAppCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewScaleAppCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	var environment string
 	var replicas int
 	cmd := &cobra.Command{

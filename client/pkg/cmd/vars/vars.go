@@ -8,7 +8,7 @@ import (
 	"sarabi/client/pkg/cmd/vars/update"
 )
 
-func NewVarsCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewVarsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "vars <command>",
 		Aliases: []string{"a"},

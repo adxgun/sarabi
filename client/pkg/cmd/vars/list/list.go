@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func NewListVarsCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewListVarsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	var environment string
 	cmd := &cobra.Command{
 		Use:     "list",

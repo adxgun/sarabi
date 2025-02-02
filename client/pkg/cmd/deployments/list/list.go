@@ -12,7 +12,7 @@ import (
 	"sarabi/client/internal/config"
 )
 
-func NewListDeploymentsCmd(svc api.Service, cfg config.Config) *cobra.Command {
+func NewListDeploymentsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	var instance string
 	var environment string
 
