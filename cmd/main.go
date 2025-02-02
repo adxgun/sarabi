@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"sarabi/internal/bundler"
 	proxycomponent "sarabi/internal/components/proxy"
+	"sarabi/internal/config"
 	"sarabi/internal/database"
 	"sarabi/internal/eventbus"
 	"sarabi/internal/firewall"
@@ -21,7 +22,6 @@ import (
 	"sarabi/internal/manager"
 	"sarabi/internal/misc"
 	"sarabi/internal/service"
-	"sarabi/internal/storage"
 	"sarabi/logger"
 	"syscall"
 	"time"
@@ -34,15 +34,22 @@ func main() {
 	}
 	defer logger.Sync()
 
-	srv, err, teardown := setup()
+	cfg := config.New()
+	srv, err, teardown := setup(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	go func() {
 		logger.Info("serving http(s) on :3646")
-		if err := srv.ListenAndServe(); err != nil {
-			log.Fatal("server closed: ", err)
+		if cfg.HasTLSConfig() {
+			if err := srv.ListenAndServeTLS(cfg.ServerSSLCertFile, cfg.ServerSSLKeyFile); err != nil {
+				log.Fatal("server closed: ", err)
+			}
+		} else {
+			if err := srv.ListenAndServe(); err != nil {
+				log.Fatal("server closed: ", err)
+			}
 		}
 	}()
 
@@ -65,7 +72,7 @@ func main() {
 	}
 }
 
-func setup() (*http.Server, error, func() error) {
+func setup(cfg config.Config) (*http.Server, error, func() error) {
 	eventBus := eventbus.New()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	docker, err := dockerclient.NewClient(eventBus)
@@ -73,7 +80,7 @@ func setup() (*http.Server, error, func() error) {
 		return nil, err, nil
 	}
 
-	db, err := database.Open(storage.DBDir)
+	db, err := database.Open(cfg.DatabasePath)
 	if err != nil {
 		return nil, err, nil
 	}
@@ -89,11 +96,11 @@ func setup() (*http.Server, error, func() error) {
 	naRepository := database.NewNetworkAccessRepository(db)
 	logsRepository := database.NewLogsRepository(db)
 
-	encryptor := misc.NewEncryptor()
+	encryptor := misc.NewEncryptor(cfg.EncryptionKey)
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
-	caddyClient := caddy.NewClient(eventBus)
-	domainService := service.NewDomainService(caddyClient, domainRepo)
+	domainService := service.NewDomainService(domainRepo)
+	caddyClient := caddy.NewClient(eventBus, domainService)
 	fm := firewall.NewManager()
 	logsManager := logs.NewManager(docker, appService, logsRepository, secretService)
 
@@ -117,7 +124,7 @@ func setup() (*http.Server, error, func() error) {
 	}()
 
 	mn := manager.New(appService, secretService, docker, caddyClient,
-		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository, eventBus)
+		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository, eventBus, cfg)
 	apiHandler := httphandlers.NewApiHandler(mn, logsManager, eventBus)
 	routes := httphandlers.Routes(apiHandler)
 
@@ -131,7 +138,6 @@ func setup() (*http.Server, error, func() error) {
 				err = sqlDB.Close()
 				logger.Info("DB Closed", zap.Error(err))
 			}
-
 			cancel()
 			// return caddyProxy.Cleanup(context.Background(), result)
 			return nil
