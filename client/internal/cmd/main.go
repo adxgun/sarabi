@@ -1,17 +1,21 @@
 package main
 
 import (
-	"log"
+	"os"
 	"sarabi/client/pkg/cmd"
 )
 
 func main() {
 	sarabiCmd, err := cmd.New()
 	if err != nil {
-		log.Fatal(err)
+		exit(err)
 	}
 
 	if err := sarabiCmd.Execute(); err != nil {
-		log.Fatal(err)
+		exit(err)
 	}
+}
+
+func exit(err error) {
+	os.Exit(1)
 }

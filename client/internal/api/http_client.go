@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type (
@@ -23,6 +24,7 @@ type (
 		Body        interface{}
 		Response    interface{}
 		QueryParams map[string]string
+		Headers     map[string]string
 	}
 
 	Client interface {
@@ -35,14 +37,25 @@ type (
 	client struct {
 		httpClient *http.Client
 		baseUrl    string
+		accessKey  string
 	}
 )
 
-func NewClient() (Client, error) {
+const (
+	accessKeyHeader = "X-Access-Key"
+)
+
+func NewClient(cfg Config) Client {
+	host := cfg.Host
+	if !strings.HasSuffix(host, "v1") {
+		host += "v1/"
+	}
+
 	return &client{
 		httpClient: &http.Client{},
-		baseUrl:    "http://localhost:3646/v1/",
-	}, nil
+		baseUrl:    host,
+		accessKey:  cfg.AccessKey,
+	}
 }
 
 func (c client) Do(ctx context.Context, param Params) error {
@@ -70,7 +83,17 @@ func (c client) Do(ctx context.Context, param Params) error {
 		}
 		req.Body = io.NopCloser(bytes.NewBuffer(bodyBin))
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+	if len(param.Headers) > 0 {
+		for k, v := range param.Headers {
+			req.Header.Set(k, v)
+		}
+	}
+
+	if c.accessKey != "" {
+		req.Header.Set(accessKeyHeader, c.accessKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -139,7 +162,17 @@ func (c client) DoMultipart(ctx context.Context, files []MultipartFile, params P
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if len(params.Headers) > 0 {
+		for k, v := range params.Headers {
+			req.Header.Set(k, v)
+		}
+	}
+
+	if c.accessKey != "" {
+		req.Header.Set(accessKeyHeader, c.accessKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -166,6 +199,16 @@ func (c client) Download(ctx context.Context, param Params) (io.ReadCloser, erro
 	req, err := http.NewRequestWithContext(ctx, param.Method, downloadUrl.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(param.Headers) > 0 {
+		for k, v := range param.Headers {
+			req.Header.Set(k, v)
+		}
+	}
+
+	if c.accessKey != "" {
+		req.Header.Set(accessKeyHeader, c.accessKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -197,6 +240,16 @@ func (c client) SSE(ctx context.Context, param Params) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, param.Method, sseUrl.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(param.Headers) > 0 {
+		for k, v := range param.Headers {
+			req.Header.Set(k, v)
+		}
+	}
+
+	if c.accessKey != "" {
+		req.Header.Set(accessKeyHeader, c.accessKey)
 	}
 
 	resp, err := c.httpClient.Do(req)

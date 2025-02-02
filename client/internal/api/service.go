@@ -13,6 +13,11 @@ type (
 	Service interface {
 		ApplicationService
 		BackupService
+		Pinger
+	}
+
+	Pinger interface {
+		Ping(ctx context.Context, uri, accessKey string) error
 	}
 
 	ApplicationService interface {
@@ -43,6 +48,23 @@ type service struct {
 
 func NewService(apiClient Client) Service {
 	return service{apiClient: apiClient}
+}
+
+func NewPinger() Service {
+	return service{}
+}
+
+func (s service) Ping(ctx context.Context, uri, accessKey string) error {
+	cli := NewClient(Config{
+		Host:      uri,
+		AccessKey: accessKey,
+	})
+
+	param := Params{
+		Method: "GET",
+		Path:   "ping",
+	}
+	return cli.Do(ctx, param)
 }
 
 func (s service) CreateApplication(ctx context.Context, params CreateApplicationParams) (Application, error) {

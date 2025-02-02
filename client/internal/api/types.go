@@ -37,6 +37,10 @@ type (
 		Environment string `json:"environment" validate:"required"`
 	}
 
+	RemoveDomainParam struct {
+		FQDN string `json:"name" validate:"required,fqdn"`
+	}
+
 	ScaleAppParams struct {
 		Count       int    `json:"count"`
 		Environment string `json:"environment"`
