@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"gorm.io/gorm"
 	"sarabi/internal/database"
-	"sarabi/internal/integrations/caddy"
-	types "sarabi/internal/types"
+	"sarabi/internal/types"
 )
 
 type (
@@ -16,17 +16,16 @@ type (
 		AddDomain(ctx context.Context, applicationID uuid.UUID, params types.AddDomainParams) (*types.Domain, error)
 		RemoveDomain(ctx context.Context, applicationID uuid.UUID, name string) (*types.Domain, error)
 		FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error)
+		FindForEnvironmentAndInstanceType(ctx context.Context, applicationID uuid.UUID, environment string, ist types.InstanceType) ([]*types.Domain, error)
 	}
 
 	domainService struct {
-		caddyClient      caddy.Client
 		domainRepository database.DomainRepository
 	}
 )
 
-func NewDomainService(caddyClient caddy.Client, domainRepo database.DomainRepository) DomainService {
+func NewDomainService(domainRepo database.DomainRepository) DomainService {
 	return &domainService{
-		caddyClient:      caddyClient,
 		domainRepository: domainRepo,
 	}
 }
@@ -72,4 +71,15 @@ func (d *domainService) RemoveDomain(ctx context.Context, applicationID uuid.UUI
 
 func (d *domainService) FindByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]*types.Domain, error) {
 	return d.domainRepository.FindByApplicationID(ctx, applicationID)
+}
+
+func (d *domainService) FindForEnvironmentAndInstanceType(ctx context.Context, applicationID uuid.UUID, environment string, ist types.InstanceType) ([]*types.Domain, error) {
+	all, err := d.FindByApplicationID(ctx, applicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	return lo.Filter(all, func(item *types.Domain, index int) bool {
+		return item.Environment == environment && item.InstanceType == ist
+	}), nil
 }

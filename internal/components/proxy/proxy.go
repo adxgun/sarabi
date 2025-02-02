@@ -61,10 +61,6 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		}, nil
 	}
 
-	if err := p.writeCaddyInitConfig(); err != nil {
-		return nil, err
-	}
-
 	err = p.dockerClient.CreateVolume(ctx, proxyStaticFilesVolume)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create static files volume")
@@ -116,6 +112,7 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		return nil, errors.Wrap(err, "caddy failed to start")
 	}
 
+	// TODO: init caddy based on its saved state
 	if err := p.caddyClient.Init(ctx); err != nil {
 		return nil, errors.Wrap(err, "caddy failed to init")
 	}

@@ -32,6 +32,7 @@ func Routes(h *ApiHandler) chi.Router {
 		r.Get("/applications/{application_id}/logs", h.TailLogs)
 		r.Get("/applications/{application_id}/stream-logs", h.StreamLogs)
 
+		r.Get("/ping", h.Ping)
 		r.Get("/h", func(writer http.ResponseWriter, request *http.Request) {
 			ok(writer, "Hoi, we're HTTPs live!", struct{}{})
 		})

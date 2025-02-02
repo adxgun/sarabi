@@ -621,3 +621,13 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+func (handler *ApiHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	err := handler.mn.Ping(r.Context(), r.Header.Get(authorizationHeader))
+	if err != nil {
+		unauthorized(w, err)
+		return
+	}
+
+	ok(w, "success", nil)
+}

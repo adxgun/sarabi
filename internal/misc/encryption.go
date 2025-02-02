@@ -22,10 +22,14 @@ const (
 	encryptionKeyFile = "sarabi.aes"
 )
 
-type encryptor struct{}
+type encryptor struct {
+	encryptionKey string
+}
 
-func NewEncryptor() Encryptor {
-	return &encryptor{}
+func NewEncryptor(key string) Encryptor {
+	return &encryptor{
+		encryptionKey: key,
+	}
 }
 
 // GenerateKey generates a random [32]byte encryption key and stores it in /sarabi_path/sarabi.aes
@@ -33,6 +37,10 @@ func NewEncryptor() Encryptor {
 // the generated key should be kept safe outside of this server(aka storage) in-case of data loss, in order to be able to retrieve
 // encrypted data(mainly application variables/secrets)
 func (e *encryptor) GenerateKey() ([]byte, error) {
+	if e.encryptionKey != "" {
+		return []byte(e.encryptionKey), nil
+	}
+
 	if _, err := os.Stat(encryptionKeyFile); err == nil {
 		f, err := os.Open(encryptionKeyFile)
 		if err != nil {

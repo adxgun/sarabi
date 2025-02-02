@@ -334,8 +334,8 @@ func (d *dockerClient) ConnectContainer(ctx context.Context, containerName, netw
 	return nil
 }
 
-// ContainerExec executes a command in the specified container and returns the output
-// for some commands, the output is not immediately available(e.g a mysql dump command for a large db), so we wait for the command to finish
+// ContainerExec executes a command in the specified container and returns the output.
+// For some commands, the output is not immediately available(e.g a mysql dump command for a large db), so we wait for the command to finish
 func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecParams) (io.Reader, error) {
 	execID, err := d.hostClient.ContainerExecCreate(ctx, params.ContainerName, container.ExecOptions{
 		Env:          params.Envs,

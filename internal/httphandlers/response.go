@@ -5,6 +5,10 @@ import (
 	"net/http"
 )
 
+const (
+	authorizationHeader = "X-Access-Token"
+)
+
 type (
 	response struct {
 		Error   bool        `json:"error"`

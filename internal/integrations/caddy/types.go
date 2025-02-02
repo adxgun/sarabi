@@ -15,7 +15,7 @@ type Apps struct {
 }
 
 type HTTP struct {
-	Servers map[string]*Server `json:"servers"`
+	Servers map[string]Server `json:"servers"`
 }
 
 type Server struct {

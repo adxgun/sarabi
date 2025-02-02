@@ -9,14 +9,13 @@ import (
 	errorpkg "github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
-	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"sarabi/internal/bundler"
 	backendcomponent "sarabi/internal/components/backend"
 	databasecomponent "sarabi/internal/components/database"
 	frontendcomponent "sarabi/internal/components/frontend"
+	"sarabi/internal/config"
 	"sarabi/internal/database"
 	"sarabi/internal/eventbus"
 	"sarabi/internal/firewall"
@@ -43,7 +42,8 @@ const (
 
 type (
 	Manager interface {
-		ValidateToken(ctx context.Context, token string) error
+		Ping(ctx context.Context, token string) error
+		ValidateToken(token string) error
 		CreateApplication(ctx context.Context, param types.CreateApplicationParams) (*types.Application, error)
 		GetApplication(ctx context.Context, applicationID *uuid.UUID, name *string) (*types.Application, error)
 		Deploy(ctx context.Context, param *types.DeployParams) error
@@ -75,6 +75,7 @@ type manager struct {
 	firewallManager firewall.Manager
 	naRepository    database.NetworkAccessRepository
 	eventBus        eventbus.Bus
+	cfg             config.Config
 }
 
 func New(
@@ -87,7 +88,8 @@ func New(
 	backup service.BackupService,
 	fm firewall.Manager,
 	naRepository database.NetworkAccessRepository,
-	eb eventbus.Bus) Manager {
+	eb eventbus.Bus,
+	cfg config.Config) Manager {
 	return &manager{
 		appService:      applicationService,
 		secretService:   secretService,
@@ -99,23 +101,22 @@ func New(
 		firewallManager: fm,
 		naRepository:    naRepository,
 		eventBus:        eb,
+		cfg:             cfg,
 	}
 }
 
-func (m *manager) ValidateToken(ctx context.Context, token string) error {
-	tokenPath := filepath.Join(storage.Path, "auth.secure")
-	fi, err := os.Open(tokenPath)
-	if err != nil {
-		return err
-	}
-
-	content, err := io.ReadAll(fi)
-	if err != nil {
-		return err
-	}
-
-	if string(content) != token {
+// ValidateToken is a simple way to granted access to the service.
+// in the future, it will change to a RBAC access
+func (m *manager) ValidateToken(token string) error {
+	if m.cfg.AccessKey != token {
 		return errors.New("access denied")
+	}
+	return nil
+}
+
+func (m *manager) Ping(ctx context.Context, token string) error {
+	if err := m.ValidateToken(token); err != nil {
+		return err
 	}
 	return nil
 }

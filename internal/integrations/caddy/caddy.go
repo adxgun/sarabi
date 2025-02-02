@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sarabi/internal/eventbus"
 	"sarabi/internal/misc"
+	"sarabi/internal/service"
 	types "sarabi/internal/types"
 	"sarabi/logger"
 	"time"
@@ -29,16 +30,17 @@ type Client interface {
 type caddyClient struct {
 	httpClient HttpClient
 	eb         eventbus.Bus
+	domain     service.DomainService
 }
 
-func NewClient(eb eventbus.Bus) Client {
-	return &caddyClient{httpClient: newCaddyHttpClient(), eb: eb}
+func NewClient(eb eventbus.Bus, ds service.DomainService) Client {
+	return &caddyClient{httpClient: newCaddyHttpClient(), eb: eb, domain: ds}
 }
 
 func (c *caddyClient) Init(ctx context.Context) error {
 	initConfig := Config{
 		Apps: Apps{
-			HTTP: HTTP{Servers: map[string]*Server{
+			HTTP: HTTP{Servers: map[string]Server{
 				mainServer: {
 					Listen: mainAccessListenPort,
 					Routes: make([]Route, 0),
@@ -141,12 +143,23 @@ func (c *caddyClient) patchBackendConfig(ctx context.Context, deployment *types.
 		})
 	}
 
+	domains, err := c.domain.FindForEnvironmentAndInstanceType(ctx, deployment.ApplicationID, deployment.Environment, types.InstanceTypeBackend)
+	if err != nil {
+		return fmt.Errorf("error fetching domains: %s", err)
+	}
+
+	var hosts []string
+	for _, next := range domains {
+		hosts = append(hosts, next.Name)
+	}
+	hosts = append(hosts, deployment.AccessURL(types.InstanceTypeBackend))
+
 	handles := make([]Handle, 0)
 	handles = append(handles, Handle{Handler: "reverse_proxy", Upstreams: upStreams})
 	updatedRoute := Route{
 		Handle: handles,
 		Match: []Match{
-			{Host: []string{deployment.AccessURL(types.InstanceTypeBackend)}},
+			{Host: hosts},
 		},
 	}
 	if host != "" {
