@@ -132,3 +132,21 @@ func ParseContainerIdentity(id string, name string) (*types.ContainerIdentity, e
 		InstanceID:   instanceID,
 	}, nil
 }
+
+func FormatURI(dbType, username, password, host, port, dbName string, sslMode string) string {
+	var uri string
+	switch strings.ToLower(dbType) {
+	case "postgres", "postgresql":
+		uri = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s", dbType, username, password, host, port, dbName, sslMode)
+	case "mysql":
+		uri = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?tls=%s", username, password, host, port, dbName, sslMode)
+	case "redis":
+		uri = fmt.Sprintf("redis://%s:%s@%s:%s", username, password, host, port)
+	case "mongodb", "mongo":
+		uri = fmt.Sprintf("mongodb://%s:%s@%s:%s/%s?ssl=%s", username, password, host, port, dbName, sslMode)
+	default:
+		return "Unsupported database type"
+	}
+
+	return uri
+}

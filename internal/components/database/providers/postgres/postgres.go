@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"fmt"
-	"github.com/google/uuid"
+	"sarabi/internal/misc"
 	types "sarabi/internal/types"
 )
 
@@ -33,12 +33,18 @@ func (p postgresProvider) Setup() error {
 }
 
 func (p postgresProvider) EnvVars(dep *types.Deployment) []types.CreateSecretParams {
+	password, _ := misc.DefaultRandomIdGenerator.Generate(64)
+	dbName := fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment)
+	username := fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment)
+	host := fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment)
+	databaseUrl := misc.FormatURI("postgres", username, password, host, p.Port(), dbName, "disable")
 	return []types.CreateSecretParams{
-		{Key: "POSTGRES_DB", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_USER", Value: fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_HOST", Value: fmt.Sprintf("postgres-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_PORT", Value: "5432", Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "POSTGRES_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_DB", Value: dbName, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_USER", Value: username, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_HOST", Value: host, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_PORT", Value: p.Port(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_PASSWORD", Value: password, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "POSTGRES_DATABASE_URL", Value: databaseUrl, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 	}
 }
 

@@ -2,7 +2,7 @@ package mysql
 
 import (
 	"fmt"
-	"github.com/google/uuid"
+	"sarabi/internal/misc"
 	types "sarabi/internal/types"
 )
 
@@ -27,13 +27,20 @@ func (p mysqlProvider) Setup() error {
 }
 
 func (p mysqlProvider) EnvVars(dep *types.Deployment) []types.CreateSecretParams {
+	masterPassword, _ := misc.DefaultRandomIdGenerator.Generate(100)
+	password, _ := misc.DefaultRandomIdGenerator.Generate(64)
+	dbName := fmt.Sprintf("mysql-%s-%s", dep.Application.Name, dep.Environment)
+	username := fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment)
+	host := fmt.Sprintf("mysql-%s-%s", dep.Application.Name, dep.Environment)
+	databaseUrl := misc.FormatURI("mysql", username, password, host, p.Port(), dbName, "disable")
 	return []types.CreateSecretParams{
-		{Key: "MYSQL_DATABASE", Value: fmt.Sprintf("mysql-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MYSQL_USER", Value: fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MYSQL_HOST", Value: fmt.Sprintf("mysql-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MYSQL_PORT", Value: "3306", Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MYSQL_ROOT_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MYSQL_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_DATABASE", Value: dbName, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_USER", Value: username, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_HOST", Value: host, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_PORT", Value: p.Port(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_ROOT_PASSWORD", Value: masterPassword, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_PASSWORD", Value: password, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MYSQL_DATABASE_URL", Value: databaseUrl, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 	}
 }
 

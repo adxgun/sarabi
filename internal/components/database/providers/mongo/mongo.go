@@ -2,7 +2,7 @@ package mongo
 
 import (
 	"fmt"
-	"github.com/google/uuid"
+	"sarabi/internal/misc"
 	types "sarabi/internal/types"
 )
 
@@ -27,11 +27,17 @@ func (p mongoProvider) Setup() error {
 }
 
 func (p mongoProvider) EnvVars(dep *types.Deployment) []types.CreateSecretParams {
+	password, _ := misc.DefaultRandomIdGenerator.Generate(64)
+	dbName := fmt.Sprintf("mongo-%s-%s", dep.Application.Name, dep.Environment)
+	username := fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment)
+	host := fmt.Sprintf("mongo-%s-%s", dep.Application.Name, dep.Environment)
+	databaseUrl := misc.FormatURI("mongo", username, password, host, p.Port(), dbName, "disable")
 	return []types.CreateSecretParams{
-		{Key: "MONGO_INITDB_ROOT_USERNAME", Value: fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MONGO_HOST", Value: fmt.Sprintf("mongo-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MONGO_PORT", Value: "27017", Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "MONGO_INITDB_ROOT_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MONGO_INITDB_ROOT_USERNAME", Value: username, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MONGO_HOST", Value: host, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MONGO_PORT", Value: p.Port(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MONGO_INITDB_ROOT_PASSWORD", Value: password, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "MONGO_DATABASE_URL", Value: databaseUrl, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 	}
 }
 

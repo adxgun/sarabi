@@ -2,7 +2,7 @@ package redis
 
 import (
 	"fmt"
-	"github.com/google/uuid"
+	"sarabi/internal/misc"
 	"sarabi/internal/types"
 )
 
@@ -17,7 +17,7 @@ func (p redisProvider) ContainerName(dep *types.Deployment) string {
 }
 
 func (p redisProvider) Image() string {
-	return "sarabi-redis:7"
+	return "bitnami/redis:7.4"
 }
 
 func (p redisProvider) Setup() error {
@@ -27,11 +27,17 @@ func (p redisProvider) Setup() error {
 }
 
 func (p redisProvider) EnvVars(dep *types.Deployment) []types.CreateSecretParams {
+	password, _ := misc.DefaultRandomIdGenerator.Generate(64)
+	dbName := fmt.Sprintf("redis-%s-%s", dep.Application.Name, dep.Environment)
+	username := fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment)
+	host := fmt.Sprintf("redis-%s-%s", dep.Application.Name, dep.Environment)
+	databaseUrl := misc.FormatURI("redis", username, password, host, p.Port(), dbName, "disable")
 	return []types.CreateSecretParams{
-		{Key: "REDIS_USER", Value: fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "REDIS_HOST", Value: fmt.Sprintf("redis-%s-%s", dep.Application.Name, dep.Environment), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "REDIS_PORT", Value: "6379", Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
-		{Key: "REDIS_PASSWORD", Value: uuid.NewString(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "REDIS_USER", Value: username, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "REDIS_HOST", Value: host, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "REDIS_PORT", Value: p.Port(), Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "REDIS_PASSWORD", Value: password, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
+		{Key: "REDIS_URL", Value: databaseUrl, Environment: dep.Environment, InstanceType: types.InstanceTypeDatabase, ApplicationID: dep.ApplicationID},
 	}
 }
 

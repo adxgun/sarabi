@@ -56,7 +56,7 @@ type (
 		AddCredentials(ctx context.Context, params types.AddCredentialsParams) (*types.ServerConfigResponse, error)
 		DownloadBackup(ctx context.Context, backupID uuid.UUID) (*types.File, error)
 		ListBackups(ctx context.Context, applicationID uuid.UUID, environment string) ([]*types.Backup, error)
-		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error)
+		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]types.Deployment, error)
 		ListApplications(ctx context.Context) ([]*types.Application, error)
 		ManageDatabaseNetworkAccess(ctx context.Context, applicationID uuid.UUID, environment, ip string, op Op) error
 		ListVariables(ctx context.Context, applicationID uuid.UUID, environment *string) ([]types.VarResponse, error)
@@ -746,16 +746,14 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 	return nil
 }
 
-func (m *manager) ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]*types.Deployment, error) {
+func (m *manager) ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]types.Deployment, error) {
 	deployments, err := m.appService.FindDeploymentsByApplication(ctx, applicationID)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.Info("all", zap.Any("all_deps", deployments))
-
 	var (
-		result []*types.Deployment
+		result []types.Deployment
 	)
 
 	for _, dep := range deployments {
@@ -765,17 +763,18 @@ func (m *manager) ListDeployments(ctx context.Context, applicationID uuid.UUID) 
 				for idx := 0; idx < dep.Instances; idx++ {
 					dep.Status, err = m.dockerClient.ContainerStatus(ctx, dep.ContainerName(idx))
 					dep.Name = fmt.Sprintf("%s-%d", dep.Application.Name, idx)
-					result = append(result, dep)
+					result = append(result, *dep)
 				}
 			case types.InstanceTypeFrontend:
 				dep.Name = fmt.Sprintf("%s-frontend", dep.Application.Name)
-				result = append(result, dep)
+				result = append(result, *dep)
 			case types.InstanceTypeDatabase:
 				for _, se := range dep.Application.StorageEngines {
 					containerName := databasecomponent.NewProvider(se).
 						ContainerName(dep)
 					dep.Status, err = m.dockerClient.ContainerStatus(ctx, containerName)
-					result = append(result, dep)
+					dep.Name = se.String()
+					result = append(result, *dep)
 				}
 			}
 		}

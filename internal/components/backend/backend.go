@@ -75,6 +75,7 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 	for _, ss := range secrets {
 		envs = append(envs, ss.Env())
 	}
+	envs = append(envs, "ENVIRONMENT="+deployment.Environment)
 
 	g, ctx := errgroup.WithContext(ctx)
 	for idx := 0; idx < deployment.Instances; idx++ {

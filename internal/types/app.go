@@ -79,8 +79,8 @@ type (
 		Name          string   `json:"name" binding:"required"`
 		Domain        string   `json:"domain" binding:"required"`
 		StorageEngine []string `json:"storage_engine" binding:"required"`
-		Frontend      string
-		Backend       string
+		Frontend      string   `json:"frontend"`
+		Backend       string   `json:"backend"`
 	}
 
 	DeployParams struct {
