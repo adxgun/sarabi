@@ -2,6 +2,12 @@ project_name: "sarabi-server"
 
 version: 2
 
+
+release:
+  github:
+    owner: adxgun
+    name: sarabi
+
 builds:
   - id: server
     dir: ./cmd
