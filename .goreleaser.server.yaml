@@ -1,5 +1,7 @@
 project_name: "sarabi-server"
 
+version: 2
+
 builds:
   - id: server
     dir: ./cmd
