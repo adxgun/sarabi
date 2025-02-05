@@ -22,6 +22,7 @@ type (
 
 	ApplicationService interface {
 		CreateApplication(ctx context.Context, params CreateApplicationParams) (Application, error)
+		GetApplication(ctx context.Context, id uuid.UUID) (Application, error)
 		Deploy(ctx context.Context, frontend, backend io.Reader, params DeployParams) (<-chan Event, error)
 		UpdateVariables(ctx context.Context, applicationID uuid.UUID, params UpdateVariablesParams) error
 		ListApplications(ctx context.Context) ([]Application, error)
@@ -333,4 +334,24 @@ func (s service) TailLogs(ctx context.Context, applicationID uuid.UUID, environm
 		QueryParams: map[string]string{"environment": environment},
 	}
 	return s.apiClient.Download(ctx, param)
+}
+
+func (s service) GetApplication(ctx context.Context, id uuid.UUID) (Application, error) {
+	var response struct {
+		Data Application `json:"data"`
+	}
+
+	param := Params{
+		Method:   "GET",
+		Path:     "application",
+		Response: &response,
+		QueryParams: map[string]string{
+			"id": id.String(),
+		},
+	}
+
+	if err := s.apiClient.Do(ctx, param); err != nil {
+		return Application{}, err
+	}
+	return response.Data, nil
 }

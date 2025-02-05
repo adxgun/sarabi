@@ -2,8 +2,6 @@ module sarabi
 
 go 1.22.7
 
-toolchain go1.22.10
-
 require (
 	github.com/briandowns/spinner v1.23.1
 	github.com/docker/docker v27.3.1+incompatible

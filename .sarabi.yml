@@ -1,3 +1,8 @@
-applicationID: 2c9dcd14-025e-4010-9b2e-2ecf871ef6d0
+applicationID: 49a6b873-a80a-42e3-a96a-c10e53c377b7
 frontend: ""
-backend: /Users/lekanadigun//github/adigunhammedolalekan/fspasssample
+backend: /Users/lekanadigun/github/adigunhammedolalekan/fspasssample
+domain: rtester.app
+storageengines:
+    - postgres
+    - mysql
+    - redis

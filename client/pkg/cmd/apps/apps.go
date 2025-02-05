@@ -5,6 +5,7 @@ import (
 	"sarabi/client/internal/api"
 	"sarabi/client/pkg/cmd/apps/create"
 	"sarabi/client/pkg/cmd/apps/list"
+	"sarabi/client/pkg/cmd/apps/use"
 )
 
 func NewAppsCmd(svc api.Service) *cobra.Command {
@@ -14,10 +15,12 @@ func NewAppsCmd(svc api.Service) *cobra.Command {
 		Short:   "Manage sarabi applications",
 		Long:    "Create, view and delete applications",
 		Run: func(cmd *cobra.Command, args []string) {
+			// TODO: validate initial configuration is set
 		},
 	}
 
 	cmd.AddCommand(create.NewCreateAppCmd(svc))
 	cmd.AddCommand(list.NewListAppsCmd(svc))
+	cmd.AddCommand(use.NewUseAppCmd(svc))
 	return cmd
 }

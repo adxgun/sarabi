@@ -1,0 +1,20 @@
+project_name: "sarabi-server"
+
+builds:
+  - id: server
+    dir: ./cmd
+    main: ./main.go
+    binary: sarabi-server
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: server_archive
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - server

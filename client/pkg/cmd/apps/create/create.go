@@ -27,7 +27,7 @@ var (
 		"Postgresql": "postgres",
 		"Mysql":      "mysql",
 		"MongoDB":    "mongo",
-		"redis":      "redis",
+		"Redis":      "redis",
 	}
 )
 
@@ -240,9 +240,11 @@ func createApp(svc api.Service, param api.CreateApplicationParams) (api.Applicat
 	}
 
 	cfg := config.ApplicationConfig{
-		ApplicationID: app.ID,
-		Frontend:      param.FePath,
-		Backend:       param.BePath,
+		ApplicationID:  app.ID,
+		Frontend:       param.FePath,
+		Backend:        param.BePath,
+		StorageEngines: app.StorageEngines,
+		Domain:         app.Domain,
 	}
 
 	value, err := yaml.Marshal(cfg)

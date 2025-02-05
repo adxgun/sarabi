@@ -14,4 +14,10 @@ layer4
 install.sh
 Dockerfile
 floki
+*.log# Added by goreleaser init:
+dist/
+49287283-9387-4cba-8300-6a10ee027f83.sql
 *.log
+main
+sarabi
+docs/.vscode

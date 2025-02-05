@@ -17,8 +17,8 @@ type (
 		Name          string   `json:"name" validate:"required"`
 		Domain        string   `json:"domain" validate:"required,fqdn"`
 		StorageEngine []string `json:"storage_engine" validate:"required"`
-		FePath        string
-		BePath        string
+		FePath        string   `json:"frontend"`
+		BePath        string   `json:"backend"`
 	}
 
 	UpdateVariablesParams struct {
@@ -62,6 +62,8 @@ type (
 		Name           string    `json:"name"`
 		Domain         string    `json:"domain"`
 		StorageEngines []string  `json:"storage_engines"`
+		Backend        string    `json:"backend"`
+		Frontend       string    `json:"frontend"`
 		CreatedAt      time.Time `json:"created_at"`
 	}
 

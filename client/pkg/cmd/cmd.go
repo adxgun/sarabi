@@ -21,16 +21,29 @@ import (
 
 func New() (*cobra.Command, error) {
 	apiClient, appConfig, err := validateConfig()
+	cfg, apiAccessKey, initerr := validateInitConfig()
+
 	cmd := &cobra.Command{
 		Use:   "sarabi",
 		Short: "sarabi - the fullstack application deployment tool",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Name() == "init" {
 				return nil
-			} else {
-				return err
 			}
+
+			if cmd.Name() == "create" {
+				return initerr
+			}
+
+			return err
 		},
+	}
+
+	if apiClient == nil {
+		apiClient = api.NewClient(api.Config{
+			Host:      cfg.Host,
+			AccessKey: apiAccessKey,
+		})
 	}
 
 	svc := api.NewService(apiClient)
@@ -48,21 +61,31 @@ func New() (*cobra.Command, error) {
 	return cmd, nil
 }
 
-func validateConfig() (api.Client, config.ApplicationConfig, error) {
+func validateInitConfig() (config.Config, string, error) {
 	cfg, err := config.Parse()
 	if err != nil {
-		return nil, config.ApplicationConfig{}, fmt.Errorf("failed to parse sarabi configuration: Did you call <sarabi config init>?")
+		return config.Config{}, "", fmt.Errorf("failed to parse sarabi configuration: Did you call <sarabi config init>?")
 	}
 
 	apiAccessKey, err := auth.Get()
 	if err != nil {
-		return nil, config.ApplicationConfig{}, fmt.Errorf("failed to parse sarabi configuration: Did you call <sarabi config init>?")
+		return config.Config{}, "", fmt.Errorf("failed to parse sarabi configuration: Did you call <sarabi config init>?")
+	}
+
+	return cfg, apiAccessKey, nil
+}
+
+func validateConfig() (api.Client, config.ApplicationConfig, error) {
+	cfg, apiAccessKey, err := validateInitConfig()
+	if err != nil {
+		return nil, config.ApplicationConfig{}, err
 	}
 
 	appConfig, err := config.ParseApplicationConfig()
 	if err != nil {
 		return nil, config.ApplicationConfig{}, fmt.Errorf("application configuration not found. are you sure you are in your app root directory?")
 	}
+
 	apiClient := api.NewClient(api.Config{
 		Host:      cfg.Host,
 		AccessKey: apiAccessKey,

@@ -1,0 +1,21 @@
+project_name: "sarabi"
+
+builds:
+  - id: cli
+    dir: ./client
+    main: ./internal/cmd/main.go
+    binary: sarabi
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: cli_archive
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - cli

@@ -18,9 +18,11 @@ const (
 
 type (
 	ApplicationConfig struct {
-		ApplicationID uuid.UUID `yaml:"applicationID"`
-		Frontend      string
-		Backend       string
+		ApplicationID  uuid.UUID `yaml:"applicationID"`
+		Frontend       string    `yaml:"frontend"`
+		Backend        string    `yaml:"backend"`
+		Domain         string    `yaml:"domain"`
+		StorageEngines []string  `yaml:"storageEngines"`
 	}
 
 	Config struct {
