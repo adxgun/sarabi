@@ -182,16 +182,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
 				return errorpkg.Wrap(err, "failed to run database component")
 			}
 
-			go func(dPort string, fm firewall.Manager) {
-				port, _ := strconv.Atoi(dPort)
-				if err := fm.BlockPortAccess(uint(port)); err != nil {
-					logger.Info("failed to block port",
-						zap.Error(err),
-						zap.String("application", app.Name),
-						zap.String("env", dbDeployment.Environment),
-						zap.String("database", string(se)))
-				}
-			}(dbPort, m.firewallManager)
+			m.blockDatabaseAccess(app, dbDeployment, dbPort, se)
 		}
 
 		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval, false); err != nil {
@@ -292,6 +283,23 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
 	data, _ := json.Marshal(resp)
 	m.eventBus.BroadcastWithData(param.Identifier, eventbus.Complete, "Success: Deployment completed", data)
 	return nil
+}
+
+func (m *manager) blockDatabaseAccess(
+	app *types.Application,
+	deployment *types.Deployment,
+	dbPort string,
+	se types.StorageEngine) {
+	go func(dPort string, fm firewall.Manager) {
+		port, _ := strconv.Atoi(dPort)
+		if err := fm.BlockPortAccess(uint(port)); err != nil {
+			logger.Info("failed to block port",
+				zap.Error(err),
+				zap.String("application", app.Name),
+				zap.String("env", deployment.Environment),
+				zap.String("database", string(se)))
+		}
+	}(dbPort, m.firewallManager)
 }
 
 func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {
@@ -705,7 +713,7 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 				zap.String("path", next.SiteContentPath()),
 				zap.Error(err))
 		} else {
-			logger.Info("remove deployment site content",
+			logger.Info("removed deployment site content",
 				zap.String("path", next.SiteContentPath()))
 		}
 

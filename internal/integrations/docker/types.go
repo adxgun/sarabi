@@ -40,10 +40,12 @@ type StartContainerParams struct {
 	Network      *string
 	Volumes      []string
 	Environments []string
+	Cmd          []string
 	ExposedPorts []nat.Port
 	PortBindings nat.PortMap
 	Mounts       map[string]string
 	Resources    types.ResourceAllocation
+	User         string
 }
 
 func (StartContainerParams) DefaultLabels() map[string]string {

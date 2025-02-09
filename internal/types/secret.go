@@ -81,3 +81,7 @@ type (
 func (s *Secret) Env() string {
 	return fmt.Sprintf("%s=%s", s.Name, s.Value)
 }
+
+func (s *StorageCredentials) URI() string {
+	return fmt.Sprintf("s3://%s:%s@%s/sarabi-logs", s.AccessKeyID, s.SecretKey, s.Endpoint)
+}

@@ -49,7 +49,7 @@ func (f *frontendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		return nil, err
 	}
 
-	f.eb.Broadcast(deployment.Identifier, eventbus.Info, "Deployment frontend...")
+	f.eb.Broadcast(deployment.Identifier, eventbus.Info, "Deploying frontend...")
 
 	previousActives, err := f.appService.FindCurrentlyActiveDeployments(ctx, deployment.ApplicationID, types.InstanceTypeFrontend)
 	if err != nil {
@@ -70,6 +70,7 @@ func (f *frontendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 		return nil, err
 	}
 
+	f.eb.Broadcast(deployment.Identifier, eventbus.Success, "frontend deployment completed...")
 	return &components.BuilderResult{
 		PreviousActive: previousActives,
 	}, nil

@@ -201,6 +201,8 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, params StartCo
 			Image:        params.Image,
 			ExposedPorts: portSet,
 			Labels:       params.DefaultLabels(),
+			Cmd:          params.Cmd,
+			User:         params.User,
 		},
 		&container.HostConfig{
 			Binds:        params.Volumes,

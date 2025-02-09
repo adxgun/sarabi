@@ -13,7 +13,7 @@ func Open(dir string) (*gorm.DB, error) {
 		return nil, errors.Wrap(err, "failed to open DB: "+dir)
 	}
 
-	if err := db.Debug().AutoMigrate(
+	if err := db.AutoMigrate(
 		&types.Application{},
 		&types.Secret{},
 		&types.Deployment{},

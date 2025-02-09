@@ -11,23 +11,23 @@ import (
 	"sarabi/internal/eventbus"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
-	service2 "sarabi/internal/service"
+	"sarabi/internal/service"
 	"sarabi/internal/types"
 	"sarabi/logger"
 )
 
 type databaseComponent struct {
 	dockerClient  docker.Docker
-	appService    service2.ApplicationService
-	secretService service2.SecretService
+	appService    service.ApplicationService
+	secretService service.SecretService
 	caddyClient   caddy.Client
 	dbProvider    Provider
 	eb            eventbus.Bus
 }
 
 func New(dc docker.Docker,
-	appSvc service2.ApplicationService,
-	secretService service2.SecretService,
+	appSvc service.ApplicationService,
+	secretService service.SecretService,
 	dbProvider Provider,
 	caddyClient caddy.Client,
 	eb eventbus.Bus) components.Builder {
@@ -48,7 +48,6 @@ func (d *databaseComponent) Name() string {
 func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
 	logger.Info("running application component: database",
 		zap.String("dockerImage", d.dbProvider.Image()))
-
 	deployment, err := d.appService.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return nil, err
