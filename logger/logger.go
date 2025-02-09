@@ -22,8 +22,8 @@ func InitLogger(mode string) error {
 			config = zap.NewDevelopmentConfig()
 		}
 
-		config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder        // Format time
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder // Add color to levels in development mode
+		config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		logger, err = config.Build()
 	})
 

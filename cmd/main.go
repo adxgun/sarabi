@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"sarabi/internal/bundler"
+	"sarabi/internal/components/logcollector"
 	proxycomponent "sarabi/internal/components/proxy"
 	"sarabi/internal/config"
 	"sarabi/internal/database"
@@ -18,6 +19,7 @@ import (
 	"sarabi/internal/httphandlers"
 	"sarabi/internal/integrations/caddy"
 	dockerclient "sarabi/internal/integrations/docker"
+	"sarabi/internal/integrations/loki"
 	"sarabi/internal/logs"
 	"sarabi/internal/manager"
 	"sarabi/internal/misc"
@@ -74,6 +76,7 @@ func main() {
 
 func setup(cfg config.Config) (*http.Server, error, func() error) {
 	eventBus := eventbus.New()
+	lokiClient := loki.NewClient()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	docker, err := dockerclient.NewClient(eventBus)
 	if err != nil {
@@ -101,8 +104,14 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
 	domainService := service.NewDomainService(domainRepo)
 	caddyClient := caddy.NewClient(eventBus, domainService)
+
+	logCollector := logcollector.New(docker, lokiClient, secretService)
+	if _, err := logCollector.Run(ctx, uuid.Nil); err != nil {
+		return nil, err, nil
+	}
+
 	fm := firewall.NewManager()
-	logsManager := logs.NewManager(docker, appService, logsRepository, secretService)
+	logsManager := logs.NewManager(docker, appService, logsRepository, secretService, lokiClient, eventBus)
 
 	backupSvc, err := service.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
 	if err != nil {
@@ -125,7 +134,7 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 
 	mn := manager.New(appService, secretService, docker, caddyClient,
 		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository, eventBus, cfg)
-	apiHandler := httphandlers.NewApiHandler(mn, logsManager, eventBus)
+	apiHandler := httphandlers.NewApiHandler(mn, logsManager, eventBus, logger.GetLogger())
 	routes := httphandlers.Routes(apiHandler)
 
 	addr := ":3646"
