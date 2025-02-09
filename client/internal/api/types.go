@@ -54,6 +54,13 @@ type (
 		Environment    string `json:"environment"`
 		CronExpression string `json:"cron_expression"`
 	}
+
+	LogFilterParams struct {
+		Environment string
+		Since       string
+		Start       string
+		End         string
+	}
 )
 
 type (

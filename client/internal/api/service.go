@@ -33,7 +33,8 @@ type (
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error
 		Rollback(ctx context.Context, identifier string) error
-		TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (io.ReadCloser, error)
+		TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (<-chan Event, error)
+		StreamLogs(ctx context.Context, applicationID uuid.UUID, filter LogFilterParams) (<-chan Event, error)
 	}
 
 	BackupService interface {
@@ -327,13 +328,38 @@ func (s service) DownloadBackup(ctx context.Context, backupID uuid.UUID) (io.Rea
 	return s.apiClient.Download(ctx, param)
 }
 
-func (s service) TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (io.ReadCloser, error) {
+func (s service) TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (<-chan Event, error) {
 	param := Params{
 		Method:      "GET",
 		Path:        fmt.Sprintf("applications/%s/logs", applicationID),
 		QueryParams: map[string]string{"environment": environment},
 	}
-	return s.apiClient.Download(ctx, param)
+
+	ch := make(chan Event, 100)
+	go func() {
+		resp, err := s.apiClient.SSE(ctx, param)
+		if err != nil {
+			ch <- Event{
+				Type:    Error,
+				Message: err.Error(),
+			}
+			return
+		}
+
+		sc := bufio.NewScanner(resp)
+		for sc.Scan() {
+			ev := &Event{}
+			if err := json.Unmarshal(sc.Bytes(), ev); err != nil {
+				continue
+			}
+
+			ch <- *ev
+		}
+
+		if err := sc.Err(); err != nil {
+		}
+	}()
+	return ch, nil
 }
 
 func (s service) GetApplication(ctx context.Context, id uuid.UUID) (Application, error) {
@@ -354,4 +380,43 @@ func (s service) GetApplication(ctx context.Context, id uuid.UUID) (Application,
 		return Application{}, err
 	}
 	return response.Data, nil
+}
+
+func (s service) StreamLogs(ctx context.Context, applicationID uuid.UUID, filter LogFilterParams) (<-chan Event, error) {
+	param := Params{
+		Method: "GET",
+		Path:   fmt.Sprintf("applications/%s/stream-logs", applicationID),
+		QueryParams: map[string]string{
+			"environment": filter.Environment,
+			"since":       filter.Since,
+			"start":       filter.Start,
+			"end":         filter.End,
+		},
+	}
+
+	ch := make(chan Event, 1000)
+	go func() {
+		resp, err := s.apiClient.SSE(ctx, param)
+		if err != nil {
+			ch <- Event{
+				Type:    Error,
+				Message: err.Error(),
+			}
+			return
+		}
+
+		sc := bufio.NewScanner(resp)
+		for sc.Scan() {
+			ev := &Event{}
+			if err := json.Unmarshal(sc.Bytes(), ev); err != nil {
+				continue
+			}
+
+			ch <- *ev
+		}
+
+		if err := sc.Err(); err != nil {
+		}
+	}()
+	return ch, nil
 }

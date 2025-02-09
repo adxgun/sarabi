@@ -3,6 +3,7 @@ package httphandlers
 import (
 	"encoding/json"
 	"net/http"
+	"sarabi/internal/misc"
 )
 
 const (
@@ -59,4 +60,19 @@ func writeError(w http.ResponseWriter, errorCode int, err error) {
 	}
 	data, _ := json.Marshal(r)
 	w.Write(data)
+}
+
+func writeSSELine(w http.ResponseWriter, data interface{}) error {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	_, _ = w.Write(bytes)
+	_, _ = w.Write(misc.Seperator)
+	flusher, ok := w.(http.Flusher)
+	if ok {
+		flusher.Flush()
+	}
+	return nil
 }

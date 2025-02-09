@@ -26,14 +26,15 @@ var (
 
 type (
 	ApiHandler struct {
-		mn manager.Manager
-		lm logs.Manager
-		eb eventbus.Bus
+		mn     manager.Manager
+		lm     logs.Manager
+		eb     eventbus.Bus
+		logger *zap.Logger
 	}
 )
 
-func NewApiHandler(mn manager.Manager, lm logs.Manager, eb eventbus.Bus) *ApiHandler {
-	return &ApiHandler{mn: mn, lm: lm, eb: eb}
+func NewApiHandler(mn manager.Manager, lm logs.Manager, eb eventbus.Bus, l *zap.Logger) *ApiHandler {
+	return &ApiHandler{mn: mn, lm: lm, eb: eb, logger: l}
 }
 
 func (handler *ApiHandler) CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -545,29 +546,41 @@ func (handler *ApiHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	environment := r.URL.Query().Get("environment")
-	filter := types.Filter{
+	queries := r.URL.Query()
+	environment := queries.Get("environment")
+	since := queries.Get("since")
+	startAt := queries.Get("start")
+	endAt := queries.Get("end")
+
+	filterParams := types.FilterParams{
 		Environment: environment,
+		Start:       &startAt,
+		End:         &endAt,
+		Since:       &since,
 	}
 
-	ch, errCh := handler.lm.Read(r.Context(), applicationID, filter)
-	for {
-		select {
-		case logEntry, ok := <-ch:
-			if !ok {
-				break
-			}
-			data, err := json.Marshal(logEntry)
-			if err != nil {
-				serverError(w, err)
-				break
-			}
-			_, _ = w.Write(data)
-		case err := <-errCh:
-			serverError(w, err)
-			break
-		}
+	filter, err := filterParams.Validate()
+	if err != nil {
+		badRequest(w, err)
+		return
 	}
+
+	filter.ApplicationID = applicationID
+	entries, err := handler.lm.Read(r.Context(), *filter)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	for _, e := range entries {
+		_ = writeSSELine(w, eventbus.Event{Type: eventbus.Info, Message: e.Log})
+	}
+
+	ok(w, "stream ended", nil)
 }
 
 func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
@@ -583,11 +596,31 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ch := handler.lm.Register(applicationID, environment)
+	identifier := fmt.Sprintf("%s-%s", applicationID, environment)
+	lg := handler.logger.With(
+		zap.String("identifier", identifier),
+		zap.String("environment", environment),
+		zap.Any("application_id", applicationID))
 
-	logger.Info("registered client for log stream",
-		zap.Any("application_id", applicationID),
-		zap.String("environment", environment))
+	filter := types.Filter{
+		Environment:   environment,
+		Since:         "5m",
+		ApplicationID: applicationID,
+		Identifier:    identifier,
+	}
+
+	entries, err := handler.lm.Read(r.Context(), filter)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+
+	for _, e := range entries {
+		_ = writeSSELine(w, eventbus.Event{Type: eventbus.Info, Message: e.Log})
+	}
+
+	ch := handler.eb.Register(identifier)
+	lg.Info("registered client for log stream")
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -597,24 +630,11 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		select {
 		case logEntry, ok := <-ch:
 			if !ok {
-				logger.Error("log stream closed",
-					zap.Any("application_id", applicationID))
 				serverError(w, errors.New("log stream closed"))
 				break
 			}
 
-			data, err := json.Marshal(logEntry)
-			if err != nil {
-				serverError(w, err)
-				continue
-			}
-
-			_, _ = w.Write(data)
-			_, _ = w.Write([]byte("\n\n"))
-			flusher, ok := w.(http.Flusher)
-			if ok {
-				flusher.Flush()
-			}
+			_ = writeSSELine(w, logEntry)
 		case <-r.Context().Done():
 			logger.Info("client disconnected")
 			return
