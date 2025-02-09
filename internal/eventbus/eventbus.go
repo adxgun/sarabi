@@ -43,36 +43,38 @@ func (e *eventPublisher) Register(identifier string) chan Event {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	ch := make(chan Event, 100)
+	ch := make(chan Event, 1000)
 	e.events[identifier] = append(e.events[identifier], ch)
 	return ch
 }
 
 func (e *eventPublisher) Broadcast(identifier string, evType Type, message string) {
 	e.lock.Lock()
-	defer e.lock.Unlock()
+	clients, ok := e.events[identifier]
+	e.lock.Unlock()
 
-	ev := Event{
-		Type:    evType,
-		Message: message,
-	}
-	if clients, ok := e.events[identifier]; ok {
+	if ok && len(clients) > 0 {
 		for _, ch := range clients {
-			ch <- ev
+			ch <- Event{
+				Type:    evType,
+				Message: message,
+			}
 		}
 	}
 }
 
 func (e *eventPublisher) BroadcastWithData(identifier string, evType Type, message string, data []byte) {
 	e.lock.Lock()
-	defer e.lock.Unlock()
+	clients, ok := e.events[identifier]
+	e.lock.Unlock()
 
 	ev := Event{
 		Type:    evType,
 		Message: message,
 		Data:    data,
 	}
-	if clients, ok := e.events[identifier]; ok {
+
+	if ok && len(clients) > 0 {
 		for _, ch := range clients {
 			ch <- ev
 		}
