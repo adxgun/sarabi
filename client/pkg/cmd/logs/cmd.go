@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/config"
+	"sarabi/client/pkg/cmd/logs/stream"
 	"sarabi/client/pkg/cmd/logs/tail"
 )
 
@@ -17,5 +18,6 @@ func NewLogsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	}
 
 	cmd.AddCommand(tail.NewTailLogsCmd(svc, cfg))
+	cmd.AddCommand(stream.NewStreamLogsCmd(svc, cfg))
 	return cmd
 }

@@ -1,14 +1,14 @@
 package tail
 
 import (
-	"bufio"
-	"encoding/json"
+	"context"
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/cmdutil"
 	"sarabi/client/internal/config"
+	"strings"
 )
 
 func NewTailLogsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
@@ -33,22 +33,27 @@ func NewTailLogsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Comman
 				return
 			}
 
-			defer func() {
-				_ = resp.Close()
-			}()
-
-			scanner := bufio.NewScanner(resp)
-			for scanner.Scan() {
-				entry := api.LogEntry{}
-				if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-					continue
+			for {
+				select {
+				case ev := <-resp:
+					handleLogEvent(ev, cancel)
+				case <-ctx.Done():
+					return
 				}
-
-				cmdutil.Print(entry.Owner + " " + entry.Log)
 			}
 		},
 	}
 
 	cmd.Flags().StringVarP(&environment, "env", "e", "", "Environment in which to tail logs")
 	return cmd
+}
+
+func handleLogEvent(ev api.Event, cancel context.CancelFunc) {
+	switch ev.Type {
+	case api.Info:
+		cmdutil.Print(strings.Trim(ev.Message, "\n"))
+	case api.Error:
+		cancel()
+		cmdutil.PrintE(strings.Trim(ev.Message, "\n"))
+	}
 }
