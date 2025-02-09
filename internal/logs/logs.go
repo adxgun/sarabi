@@ -3,20 +3,20 @@ package logs
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types/events"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"os"
 	"sarabi/internal/database"
+	"sarabi/internal/eventbus"
 	"sarabi/internal/integrations/docker"
+	"sarabi/internal/integrations/loki"
 	"sarabi/internal/misc"
 	"sarabi/internal/service"
-	"sarabi/internal/storage"
 	"sarabi/internal/types"
 	"sarabi/logger"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,8 +31,7 @@ import (
 type (
 	Manager interface {
 		Watch(ctx context.Context)
-		Read(ctx context.Context, applicationID uuid.UUID, filter types.Filter) (<-chan types.LogEntry, <-chan error)
-		Register(applicationID uuid.UUID, environment string) <-chan LogEntry
+		Read(ctx context.Context, filter types.Filter) ([]types.LogEntry, error)
 	}
 
 	manager struct {
@@ -40,12 +39,14 @@ type (
 		applicationService service.ApplicationService
 		varsService        service.SecretService
 		repo               database.LogsRepository
+		lokiClient         loki.Client
 
-		clientsMu sync.Mutex
-		watchers  map[string][]Client
+		eb eventbus.Bus
 
-		mu       sync.Mutex
-		logFiles map[string]*os.File
+		mu       sync.RWMutex
+		entries  chan types.Batch
+		batches  map[string][]types.Batch
+		backlogs map[string][]types.Batch
 	}
 )
 
@@ -60,14 +61,19 @@ func NewManager(
 	dc docker.Docker,
 	applicationService service.ApplicationService,
 	repo database.LogsRepository,
-	varsService service.SecretService) Manager {
+	varsService service.SecretService,
+	lokiClient loki.Client,
+	eb eventbus.Bus) Manager {
 	return &manager{
 		dockerClient:       dc,
 		applicationService: applicationService,
 		varsService:        varsService,
 		repo:               repo,
-		watchers:           make(map[string][]Client),
-		logFiles:           make(map[string]*os.File), mu: sync.Mutex{}}
+		lokiClient:         lokiClient,
+		backlogs:           make(map[string][]types.Batch),
+		entries:            make(chan types.Batch, 1000),
+		batches:            make(map[string][]types.Batch),
+		eb:                 eb}
 }
 
 func (m *manager) Watch(ctx context.Context) {
@@ -75,6 +81,9 @@ func (m *manager) Watch(ctx context.Context) {
 		logger.Error("failed to restore streaming",
 			zap.Error(err))
 	}
+
+	go m.aggregator(ctx)
+	go m.flusher(ctx)
 
 	evChan, errChan := m.dockerClient.ContainerEvents(ctx)
 	for {
@@ -104,17 +113,13 @@ func (m *manager) handleContainerEvent(ctx context.Context, ev events.Message) {
 		return
 	}
 
-	containerName, ok := ev.Actor.Attributes["name"]
+	name, ok := ev.Actor.Attributes["name"]
 	if !ok {
-		logger.Error("container name not found: ", zap.Any("event", ev.Actor))
 		return
 	}
 
-	identity, err := misc.ParseContainerIdentity(ev.Actor.ID, containerName)
+	identity, err := misc.ParseContainerIdentity(ev.Actor.ID, name)
 	if err != nil {
-		logger.Error("error parsing container name",
-			zap.Error(err),
-			zap.String("container_name", containerName))
 		return
 	}
 
@@ -157,32 +162,16 @@ func (m *manager) startStreaming(ctx context.Context, identity *types.ContainerI
 		case <-ctx.Done():
 			return nil
 		default:
-			logOwner := fmt.Sprintf("[%s-%d]", deployment.Application.Name, identity.InstanceID)
+			logOwner := fmt.Sprintf("[%s-%s-%d]", deployment.Application.Name, deployment.Environment, identity.InstanceID)
 			scanner := bufio.NewScanner(logHandle)
 			for scanner.Scan() {
-				entry := LogEntry{Owner: logOwner, Log: scanner.Text()}
-				val, err := json.Marshal(entry)
-				if err != nil {
-					logger.Error("failed to marshal log entry", zap.Error(err))
-					continue
+				entry := types.LogEntry{Owner: logOwner, Log: scanner.Text(), Ts: strconv.FormatInt(time.Now().UnixNano(), 10)}
+				m.entries <- types.Batch{
+					Log:        entry,
+					Deployment: deployment,
 				}
 
 				m.broadcast(entry, deployment.Application.ID, deployment.Environment)
-
-				f, err := m.getLogFile(deployment)
-				if err != nil {
-					return errors.Wrap(err, "failed to get log file")
-				}
-
-				_, err = f.Write(val)
-				if err != nil {
-					return errors.Wrap(err, "failed to write log entry")
-				}
-
-				_, err = f.Write([]byte("\n"))
-				if err != nil {
-					return errors.Wrap(err, "failed to write new line")
-				}
 
 				if err := scanner.Err(); err != nil {
 					logger.Warn("log scanner error", zap.Error(err))
@@ -194,182 +183,75 @@ func (m *manager) startStreaming(ctx context.Context, identity *types.ContainerI
 }
 
 func (m *manager) stopStreaming(ctx context.Context, identity *types.ContainerIdentity) error {
-	deployment, err := m.applicationService.GetDeployment(ctx, identity.DeploymentID)
+	_, err := m.applicationService.GetDeployment(ctx, identity.DeploymentID)
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch deployment")
 	}
 
-	logFile, err := os.Open(deployment.LogFilename())
-	if err != nil {
-		return errors.Wrap(err, "failed to get log file")
-	}
-
-	st, stType, err := m.getConfiguredStorage(ctx, deployment.ApplicationID)
-	if err != nil {
-		return errors.Wrap(err, "failed to get storage")
-	}
-
-	stat, err := logFile.Stat()
-	if err != nil || stat == nil {
-		return errors.Wrap(err, "failed to get log file stat")
-	}
-
-	logsLocation := fmt.Sprintf("%s/%s.log", storage.AppLogDir, uuid.New())
-	if err := st.Save(ctx, logsLocation, types.File{
-		Content: logFile,
-		Stat:    types.FileStat{ContentType: "text/plain", Size: stat.Size()},
-	}); err != nil {
-		return errors.Wrap(err, "failed to save log file in storage")
-	}
-
-	entry := types.Log{
-		ID:            uuid.New(),
-		DeploymentID:  deployment.ID,
-		ApplicationID: deployment.ApplicationID,
-		Environment:   deployment.Environment,
-		Location:      logsLocation,
-		StorageType:   stType.String(),
-		ContainerID:   identity.ID,
-		Timestamp:     time.Now(),
-	}
-	if err := m.repo.Save(ctx, &entry); err != nil {
-		return errors.Wrap(err, "failed to save log entry")
-	}
-
-	m.deleteLogFile(deployment)
 	return nil
 }
 
-func (m *manager) getLogFile(dep *types.Deployment) (*os.File, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	logFileKey := dep.LogFilename()
-	if f, ok := m.logFiles[logFileKey]; ok {
-		return f, nil
-	}
-
-	// TODO: change file permission to read only by owner
-	f, err := os.Create(logFileKey)
-	if err != nil {
-		return nil, err
-	}
-
-	m.logFiles[logFileKey] = f
-	return f, nil
-}
-
-func (m *manager) Read(ctx context.Context, applicationID uuid.UUID, filter types.Filter) (<-chan types.LogEntry, <-chan error) {
-	var ch = make(chan types.LogEntry)
-	var errCh = make(chan error)
-
-	logs, err := m.repo.FindAll(ctx, applicationID, filter)
-	if err != nil {
-		errCh <- err
-		close(ch)
-		close(errCh)
-		return ch, errCh
-	}
-
-	go func(ctx context.Context, applicationID uuid.UUID) {
-		for _, log := range logs {
-			st, err := m.getStorage(ctx, applicationID, storage.Type(log.StorageType))
-			if err != nil {
-				errCh <- err
-				return
-			}
-
-			file, err := st.Get(ctx, log.Location)
-			if err != nil {
-				errCh <- err
-				return
-			}
-
-			scanner := bufio.NewScanner(file.Content)
-			for scanner.Scan() {
-				var entry types.LogEntry
-				if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
-					errCh <- err
-					return
-				}
-
-				ch <- entry
-			}
-
-			if err := scanner.Err(); err != nil {
-				errCh <- err
-			}
-
-			_ = file.Content.Close()
+func (m *manager) aggregator(ctx context.Context) {
+	for {
+		select {
+		case batch := <-m.entries:
+			m.mu.Lock()
+			m.batches[batch.Deployment.ID.String()] = append(m.batches[batch.Deployment.ID.String()], batch)
+			m.mu.Unlock()
+		case <-ctx.Done():
+			break
 		}
-	}(ctx, applicationID)
-
-	return ch, errCh
-}
-
-func (m *manager) Register(applicationID uuid.UUID, environment string) <-chan LogEntry {
-	ch := make(chan LogEntry, 100)
-	m.clientsMu.Lock()
-	defer m.clientsMu.Unlock()
-
-	key := fmt.Sprintf("%s-%s", applicationID, environment)
-	m.watchers[key] = append(m.watchers[key], ch)
-	return ch
-}
-
-func (m *manager) broadcast(entry LogEntry, applicationID uuid.UUID, environment string) {
-	m.clientsMu.Lock()
-	defer m.clientsMu.Unlock()
-
-	key := fmt.Sprintf("%s-%s", applicationID, environment)
-	for _, ch := range m.watchers[key] {
-		ch <- entry
 	}
 }
 
-func (m *manager) deleteLogFile(dep *types.Deployment) {
-	// TODO: figure out what to do here
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *manager) flusher(ctx context.Context) {
+	var (
+		flushInterval        = time.Second * 10
+		backlogFlushInterval = time.Second * 30
+		ticker               = time.NewTicker(flushInterval)
+		backlogTicker        = time.NewTicker(backlogFlushInterval)
+	)
 
-	logFileKey := dep.LogFilename()
-	if f, ok := m.logFiles[logFileKey]; ok {
-		logger.Info("files before remove", zap.Any("files", m.logFiles))
-		_ = f.Close()
-		_ = os.Remove(logFileKey)
-		delete(m.logFiles, logFileKey)
-		logger.Info("files after remove", zap.Any("files", m.logFiles))
-	}
-}
+	for {
+		select {
+		case <-ticker.C:
+			m.mu.Lock()
+			batches := m.batches
+			m.batches = make(map[string][]types.Batch)
+			m.mu.Unlock()
 
-func (m *manager) getConfiguredStorage(ctx context.Context, applicationID uuid.UUID) (storage.Storage, storage.Type, error) {
-	creds, err := m.varsService.FindStorageCredentials(ctx, applicationID)
-	if err != nil {
-		logger.Info("cannot find object storage credentials, storing logs on filesystem", zap.Error(err))
-		return storage.NewFileStorage(), storage.TypeFS, nil
-	}
-
-	st, err := storage.NewObjectStorage(*creds)
-	if err != nil {
-		logger.Info("cannot find object storage credentials, storing logs on filesystem", zap.Error(err))
-		return storage.NewFileStorage(), storage.TypeFS, nil
-	}
-	return st, storage.TypeS3, nil
-}
-
-func (m *manager) getStorage(ctx context.Context, applicationID uuid.UUID, st storage.Type) (storage.Storage, error) {
-	switch st {
-	case storage.TypeFS:
-		return storage.NewFileStorage(), nil
-	case storage.TypeS3:
-		creds, err := m.varsService.FindStorageCredentials(ctx, applicationID)
-		if err != nil {
-			return nil, err
+			go m.sendBatches(ctx, batches)
+		case <-backlogTicker.C:
+			m.mu.Lock()
+			batches := m.backlogs
+			m.backlogs = make(map[string][]types.Batch)
+			m.mu.Unlock()
+			go m.sendBatches(ctx, batches)
+		case <-ctx.Done():
+			break
 		}
-		return storage.NewObjectStorage(*creds)
-	default:
-		return nil, errors.New("unknown storage type")
 	}
+}
+
+func (m *manager) sendBatches(ctx context.Context, batches map[string][]types.Batch) {
+	err := m.lokiClient.Push(ctx, batches)
+	if err != nil {
+		logger.Error("failed to push logs to loki. adding to backlogs...", zap.Error(err))
+		m.mu.Lock()
+		for id, values := range batches {
+			m.backlogs[id] = append(m.backlogs[id], values...)
+		}
+		m.mu.Unlock()
+	}
+}
+
+func (m *manager) Read(ctx context.Context, filter types.Filter) ([]types.LogEntry, error) {
+	return m.lokiClient.Query(ctx, filter)
+}
+
+func (m *manager) broadcast(entry types.LogEntry, applicationID uuid.UUID, environment string) {
+	key := fmt.Sprintf("%s-%s", applicationID, environment)
+	m.eb.Broadcast(key, eventbus.Info, entry.Line())
 }
 
 func (m *manager) restoreStreaming(ctx context.Context) error {
@@ -384,9 +266,6 @@ func (m *manager) restoreStreaming(ctx context.Context) error {
 		if c.State == "running" {
 			identity, err := misc.ParseContainerIdentity(c.ID, strings.Replace(c.Name, "/", "", 1))
 			if err != nil {
-				logger.Error("error parsing container name",
-					zap.Error(err),
-					zap.String("container_name", c.Name))
 				continue
 			}
 
