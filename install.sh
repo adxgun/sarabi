@@ -60,13 +60,13 @@ download_sarabi() {
 
   # This assumes the extracted binary is named 'sarabi'
   # Adjust the binary name/path if needed.
-  if [ ! -f "sarabi" ]; then
+  if [ ! -f "sarabi-server" ]; then
     echo "Failed to find the 'sarabi' binary after extraction. Exiting."
     exit 1
   fi
 
   echo "Making sarabi executable..."
-  chmod +x sarabi
+  chmod +x sarabi-server
 
   echo "Cleaning up the downloaded archive..."
   rm sarabi.tar.gz
@@ -106,7 +106,7 @@ Description=Sarabi Service
 After=network.target
 
 [Service]
-ExecStart=$(pwd)/sarabi
+ExecStart=$(pwd)/sarabi-server
 Environment=ACCESS_SECRET=$ACCESS_SECRET
 Environment=ENCRYPTION_KEY=$ENCRYPTION_KEY
 $(if [ -n "$DOMAIN_NAME" ]; then
