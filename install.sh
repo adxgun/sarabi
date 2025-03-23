@@ -156,4 +156,4 @@ main() {
   output_success_message
 }
 
-download_sarabi
+main
