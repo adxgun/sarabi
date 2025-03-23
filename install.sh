@@ -51,10 +51,29 @@ download_sarabi() {
     exit 1
   fi
 
-  echo "Downloading sarabi (Linux) binary from $LATEST_LINUX_URL"
-  wget -O sarabi "$LATEST_LINUX_URL"
+  echo "Downloading sarabi (Linux) archive from $LATEST_LINUX_URL"
+  # wget -O sarabi.tar.gz "$LATEST_LINUX_URL"
+  curl -L $LATEST_LINUX_URL -o sarabi.tar.gz
+
+  echo "Extracting sarabi.tar.gz..."
+  tar -xzf sarabi.tar.gz
+
+  # This assumes the extracted binary is named 'sarabi'
+  # Adjust the binary name/path if needed.
+  if [ ! -f "sarabi" ]; then
+    echo "Failed to find the 'sarabi' binary after extraction. Exiting."
+    exit 1
+  fi
+
+  echo "Making sarabi executable..."
   chmod +x sarabi
+
+  echo "Cleaning up the downloaded archive..."
+  rm sarabi.tar.gz
+
+  echo "sarabi downloaded and ready!"
 }
+
 
 # Function to generate secrets
 generate_access_secret() {
@@ -137,4 +156,4 @@ main() {
   output_success_message
 }
 
-main
+download_sarabi
