@@ -39,14 +39,20 @@ install_docker() {
 
 # Function to download the latest Sarabi binary from GitHub releases
 download_sarabi() {
-  LATEST_RELEASE_URL=$(curl -s https://api.github.com/repos/adxgun/sarabi/releases/latest | grep "browser_download_url" | cut -d '"' -f 4)
-  if [ -z "$LATEST_RELEASE_URL" ]; then
-    echo "Failed to fetch sarabi release URL. Exiting."
+  LATEST_LINUX_URL=$(
+    curl -s https://api.github.com/repos/adxgun/sarabi/releases/latest \
+    | grep "browser_download_url" \
+    | grep "linux_amd64" \
+    | cut -d '"' -f 4
+  )
+
+  if [ -z "$LATEST_LINUX_URL" ]; then
+    echo "Failed to fetch sarabi Linux release URL. Exiting."
     exit 1
   fi
 
-  echo "Downloading sarabi binary from $LATEST_RELEASE_URL"
-  wget -O sarabi "$LATEST_RELEASE_URL"
+  echo "Downloading sarabi (Linux) binary from $LATEST_LINUX_URL"
+  wget -O sarabi "$LATEST_LINUX_URL"
   chmod +x sarabi
 }
 
