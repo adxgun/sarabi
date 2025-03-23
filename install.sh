@@ -113,7 +113,7 @@ $(if [ -n "$DOMAIN_NAME" ]; then
   echo "Environment=SSL_CERT_FILE=$SSL_CERT_FILE"
   echo "Environment=SSL_KEY_FILE=$SSL_KEY_FILE"
 fi)
-Restart=always
+Restart=on-failure
 User=root
 
 [Install]
