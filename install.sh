@@ -131,7 +131,8 @@ main() {
   setup_domain
   install_docker
   download_sarabi
-  generate_secrets
+  generate_access_secret
+  generate_or_recover_encryption_key
   start_sarabi_service
   output_success_message
 }
