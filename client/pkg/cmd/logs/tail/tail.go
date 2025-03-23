@@ -13,6 +13,7 @@ import (
 
 func NewTailLogsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command {
 	var environment string
+	var lines int64
 	cmd := &cobra.Command{
 		Use:     "tail",
 		Short:   "Tail logs",
@@ -24,10 +25,18 @@ func NewTailLogsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Comman
 				return
 			}
 
+			if lines == 0 {
+				lines = 30
+			}
+
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer cancel()
 
-			resp, err := svc.TailLogs(ctx, cfg.ApplicationID, environment)
+			resp, err := svc.TailLogs(ctx, api.LogFilterParams{
+				Environment:   environment,
+				ApplicationID: cfg.ApplicationID,
+				N:             lines,
+			})
 			if err != nil {
 				cmdutil.PrintE(err.Error())
 				return
@@ -38,13 +47,14 @@ func NewTailLogsCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Comman
 				case ev := <-resp:
 					handleLogEvent(ev, cancel)
 				case <-ctx.Done():
-					return
+					break
 				}
 			}
 		},
 	}
 
 	cmd.Flags().StringVarP(&environment, "env", "e", "", "Environment in which to tail logs")
+	cmd.Flags().Int64VarP(&lines, "line", "n", 0, "Initial number of lines to return, defaults to 30")
 	return cmd
 }
 

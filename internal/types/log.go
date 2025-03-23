@@ -25,6 +25,7 @@ type (
 		Start       *string
 		End         *string
 		Since       *string
+		Limit       *int64
 	}
 
 	Filter struct {
@@ -33,6 +34,7 @@ type (
 		End           time.Time
 		Since         string
 		ApplicationID uuid.UUID
+		Limit         int64
 
 		Identifier string
 	}
@@ -87,6 +89,16 @@ func (f FilterParams) Validate() (*Filter, error) {
 
 	if !r.Start.IsZero() && r.Since != "" {
 		return nil, errors.New("you cannot use both 'start' and 'since' to query logs")
+	}
+
+	if f.Limit != nil {
+		if *f.Limit <= 0 {
+			r.Limit = 50
+		} else {
+			r.Limit = *f.Limit
+		}
+	} else {
+		r.Limit = 50
 	}
 
 	return r, nil

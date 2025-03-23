@@ -33,7 +33,7 @@ type (
 		ListDeployments(ctx context.Context, applicationID uuid.UUID) ([]Deployment, error)
 		Scale(ctx context.Context, applicationID uuid.UUID, params ScaleAppParams) error
 		Rollback(ctx context.Context, identifier string) error
-		TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (<-chan Event, error)
+		TailLogs(ctx context.Context, params LogFilterParams) (<-chan Event, error)
 		StreamLogs(ctx context.Context, applicationID uuid.UUID, filter LogFilterParams) (<-chan Event, error)
 	}
 
@@ -328,11 +328,14 @@ func (s service) DownloadBackup(ctx context.Context, backupID uuid.UUID) (io.Rea
 	return s.apiClient.Download(ctx, param)
 }
 
-func (s service) TailLogs(ctx context.Context, applicationID uuid.UUID, environment string) (<-chan Event, error) {
+func (s service) TailLogs(ctx context.Context, f LogFilterParams) (<-chan Event, error) {
 	param := Params{
-		Method:      "GET",
-		Path:        fmt.Sprintf("applications/%s/logs", applicationID),
-		QueryParams: map[string]string{"environment": environment},
+		Method: "GET",
+		Path:   fmt.Sprintf("applications/%s/logs", f.ApplicationID),
+		QueryParams: map[string]string{
+			"environment": f.Environment,
+			"limit":       fmt.Sprintf("%d", f.N),
+		},
 	}
 
 	ch := make(chan Event, 100)
@@ -357,6 +360,10 @@ func (s service) TailLogs(ctx context.Context, applicationID uuid.UUID, environm
 		}
 
 		if err := sc.Err(); err != nil {
+			ch <- Event{
+				Type:    Error,
+				Message: err.Error(),
+			}
 		}
 	}()
 	return ch, nil

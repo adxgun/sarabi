@@ -56,10 +56,12 @@ type (
 	}
 
 	LogFilterParams struct {
-		Environment string
-		Since       string
-		Start       string
-		End         string
+		Environment   string
+		Since         string
+		Start         string
+		End           string
+		ApplicationID uuid.UUID
+		N             int64
 	}
 )
 

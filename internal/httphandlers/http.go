@@ -16,6 +16,7 @@ import (
 	"sarabi/internal/misc"
 	"sarabi/internal/types"
 	"sarabi/logger"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -551,12 +552,15 @@ func (handler *ApiHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	since := queries.Get("since")
 	startAt := queries.Get("start")
 	endAt := queries.Get("end")
+	nLimit, _ := strconv.Atoi(queries.Get("limit"))
 
+	limit := int64(nLimit)
 	filterParams := types.FilterParams{
 		Environment: environment,
 		Start:       &startAt,
 		End:         &endAt,
 		Since:       &since,
+		Limit:       &limit,
 	}
 
 	filter, err := filterParams.Validate()
@@ -580,7 +584,7 @@ func (handler *ApiHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		_ = writeSSELine(w, eventbus.Event{Type: eventbus.Info, Message: e.Log})
 	}
 
-	ok(w, "stream ended", nil)
+	_ = writeSSELine(w, eventbus.Event{Type: eventbus.Complete})
 }
 
 func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
@@ -596,20 +600,36 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limit := r.URL.Query().Get("limit")
+	var nLimit int
+	if limit != "" {
+		nLimit, err = strconv.Atoi(limit)
+		if err != nil {
+			badRequest(w, err)
+			return
+		}
+	}
+
+	if nLimit == 0 {
+		nLimit = 30
+	}
+
 	identifier := fmt.Sprintf("%s-%s", applicationID, environment)
 	lg := handler.logger.With(
 		zap.String("identifier", identifier),
 		zap.String("environment", environment),
-		zap.Any("application_id", applicationID))
+		zap.Any("application_id", applicationID),
+		zap.Int("limit", nLimit))
 
 	filter := types.Filter{
 		Environment:   environment,
 		Since:         "5m",
 		ApplicationID: applicationID,
 		Identifier:    identifier,
+		Limit:         int64(nLimit),
 	}
 
-	entries, err := handler.lm.Read(r.Context(), filter)
+	entries, err := handler.lm.ReadMem(filter)
 	if err != nil {
 		serverError(w, err)
 		return

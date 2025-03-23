@@ -8,6 +8,7 @@ type Config struct {
 	Common        CommonConfig  `yaml:"common"`
 	SchemaConfig  SchemaConfig  `yaml:"schema_config"`
 	StorageConfig StorageConfig `yaml:"storage_config"`
+	LimitsConfig  LimitsConfig  `yaml:"limits_config"`
 }
 
 type ServerConfig struct {
@@ -66,6 +67,12 @@ type FileSystemConfig struct {
 	Directory string `json:"directory"`
 }
 
+type LimitsConfig struct {
+	IngestionRateMB      float64 `yaml:"ingestion_rate_mb"`
+	IngestionBurstSizeMB float64 `yaml:"ingestion_burst_size_mb"`
+	MaxLineSize          int64   `yaml:"max_line_size"`
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		AuthEnabled: false,
@@ -104,6 +111,11 @@ func DefaultConfig() *Config {
 			AWS: &AWSConfig{
 				S3ForcePathStyle: true,
 			},
+		},
+		LimitsConfig: LimitsConfig{
+			IngestionRateMB:      16,
+			IngestionBurstSizeMB: 32,
+			MaxLineSize:          1048576, // 1MB
 		},
 	}
 }

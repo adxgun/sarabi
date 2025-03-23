@@ -59,7 +59,7 @@ type dockerClient struct {
 
 func NewClient(eb eventbus.Bus) (Docker, error) {
 	hostClient, err := client.NewClientWithOpts(client.FromEnv,
-		client.WithAPIVersionNegotiation(), client.WithTimeout(10*time.Minute))
+		client.WithAPIVersionNegotiation(), client.WithTimeout(0))
 	if err != nil {
 		return nil, err
 	}

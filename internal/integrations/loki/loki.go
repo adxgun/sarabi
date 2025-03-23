@@ -61,8 +61,8 @@ func (c client) Ready(ctx context.Context) error {
 
 func (c client) Query(ctx context.Context, f types.Filter) ([]types.LogEntry, error) {
 	u := url.Values{}
-	u.Add("limit", "1000")
-	u.Add("direction", "forward")
+	u.Add("limit", fmt.Sprintf("%d", f.Limit))
+	u.Add("direction", "backward")
 	if f.Since != "" {
 		u.Add("since", f.Since)
 	}

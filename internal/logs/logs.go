@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/docker/docker/api/types/events"
+	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math/rand"
 	"sarabi/internal/database"
 	"sarabi/internal/eventbus"
 	"sarabi/internal/integrations/docker"
@@ -22,16 +24,11 @@ import (
 	"time"
 )
 
-// how it works
-// 1. Manager.Run() starts a goroutine that listens to container events
-// 2. When a container starts, it starts streaming logs from the container, saving them to a temp file
-// 3. When a container is destroyed, it stops streaming logs, saves the logs to a storage, and deletes the temp file
-// 4. Manager.Read() reads logs from the storage and returns them
-
 type (
 	Manager interface {
 		Watch(ctx context.Context)
 		Read(ctx context.Context, filter types.Filter) ([]types.LogEntry, error)
+		ReadMem(filter types.Filter) ([]types.LogEntry, error)
 	}
 
 	manager struct {
@@ -43,10 +40,10 @@ type (
 
 		eb eventbus.Bus
 
-		mu       sync.RWMutex
-		entries  chan types.Batch
-		batches  map[string][]types.Batch
-		backlogs map[string][]types.Batch
+		mu          sync.RWMutex
+		entries     chan types.Batch
+		batches     map[string][]types.Batch
+		lastEntries *EvictingList[types.Batch]
 	}
 )
 
@@ -54,6 +51,22 @@ var (
 	supportedActions = map[string]bool{
 		"start":   true,
 		"destroy": true,
+	}
+
+	identifierColors = map[string]*color.Color{}
+	availableColors  = []*color.Color{
+		color.New(color.FgHiRed),
+		color.New(color.FgHiGreen),
+		color.New(color.FgHiYellow),
+		color.New(color.FgHiBlue),
+		color.New(color.FgHiMagenta),
+		color.New(color.FgHiCyan),
+		color.New(color.FgRed),
+		color.New(color.FgGreen),
+		color.New(color.FgYellow),
+		color.New(color.FgBlue),
+		color.New(color.FgMagenta),
+		color.New(color.FgCyan),
 	}
 )
 
@@ -70,9 +83,9 @@ func NewManager(
 		varsService:        varsService,
 		repo:               repo,
 		lokiClient:         lokiClient,
-		backlogs:           make(map[string][]types.Batch),
 		entries:            make(chan types.Batch, 1000),
 		batches:            make(map[string][]types.Batch),
+		lastEntries:        NewEvictingList[types.Batch](50),
 		eb:                 eb}
 }
 
@@ -85,7 +98,7 @@ func (m *manager) Watch(ctx context.Context) {
 	go m.aggregator(ctx)
 	go m.flusher(ctx)
 
-	evChan, errChan := m.dockerClient.ContainerEvents(ctx)
+	evChan, errChan := m.dockerClient.ContainerEvents(context.Background())
 	for {
 		select {
 		case ev := <-evChan:
@@ -95,7 +108,7 @@ func (m *manager) Watch(ctx context.Context) {
 				logger.Error("container events error",
 					zap.Error(err))
 			}
-			evChan, errChan = m.tryReconnect(ctx)
+			evChan, errChan = m.tryReconnect()
 		case <-ctx.Done():
 			logger.Info("stopping logs manager...")
 			break
@@ -103,9 +116,9 @@ func (m *manager) Watch(ctx context.Context) {
 	}
 }
 
-func (m *manager) tryReconnect(ctx context.Context) (<-chan events.Message, <-chan error) {
+func (m *manager) tryReconnect() (<-chan events.Message, <-chan error) {
 	time.Sleep(100 * time.Millisecond)
-	return m.dockerClient.ContainerEvents(ctx)
+	return m.dockerClient.ContainerEvents(context.Background())
 }
 
 func (m *manager) handleContainerEvent(ctx context.Context, ev events.Message) {
@@ -162,7 +175,7 @@ func (m *manager) startStreaming(ctx context.Context, identity *types.ContainerI
 		case <-ctx.Done():
 			return nil
 		default:
-			logOwner := fmt.Sprintf("[%s-%s-%d]", deployment.Application.Name, deployment.Environment, identity.InstanceID)
+			logOwner := m.getColoredString(fmt.Sprintf("[%s-%s-%d]", deployment.Application.Name, deployment.Environment, identity.InstanceID))
 			scanner := bufio.NewScanner(logHandle)
 			for scanner.Scan() {
 				entry := types.LogEntry{Owner: logOwner, Log: scanner.Text(), Ts: strconv.FormatInt(time.Now().UnixNano(), 10)}
@@ -198,6 +211,7 @@ func (m *manager) aggregator(ctx context.Context) {
 			m.mu.Lock()
 			m.batches[batch.Deployment.ID.String()] = append(m.batches[batch.Deployment.ID.String()], batch)
 			m.mu.Unlock()
+			m.lastEntries.Add(batch)
 		case <-ctx.Done():
 			break
 		}
@@ -206,10 +220,8 @@ func (m *manager) aggregator(ctx context.Context) {
 
 func (m *manager) flusher(ctx context.Context) {
 	var (
-		flushInterval        = time.Second * 10
-		backlogFlushInterval = time.Second * 30
-		ticker               = time.NewTicker(flushInterval)
-		backlogTicker        = time.NewTicker(backlogFlushInterval)
+		flushInterval = time.Second * 5
+		ticker        = time.NewTicker(flushInterval)
 	)
 
 	for {
@@ -221,12 +233,6 @@ func (m *manager) flusher(ctx context.Context) {
 			m.mu.Unlock()
 
 			go m.sendBatches(ctx, batches)
-		case <-backlogTicker.C:
-			m.mu.Lock()
-			batches := m.backlogs
-			m.backlogs = make(map[string][]types.Batch)
-			m.mu.Unlock()
-			go m.sendBatches(ctx, batches)
 		case <-ctx.Done():
 			break
 		}
@@ -234,14 +240,21 @@ func (m *manager) flusher(ctx context.Context) {
 }
 
 func (m *manager) sendBatches(ctx context.Context, batches map[string][]types.Batch) {
-	err := m.lokiClient.Push(ctx, batches)
-	if err != nil {
-		logger.Error("failed to push logs to loki. adding to backlogs...", zap.Error(err))
-		m.mu.Lock()
-		for id, values := range batches {
-			m.backlogs[id] = append(m.backlogs[id], values...)
+	// process 100 per batch
+	for key, next := range batches {
+		for i := 0; i < len(next); i += 100 {
+			end := i + 100
+			if end > len(next) {
+				end = len(next)
+			}
+
+			next100Batch := make(map[string][]types.Batch)
+			next100Batch[key] = next[i:end]
+			err := m.lokiClient.Push(ctx, next100Batch)
+			if err != nil {
+				logger.Error("failed to push logs to loki.", zap.Error(err))
+			}
 		}
-		m.mu.Unlock()
 	}
 }
 
@@ -260,7 +273,8 @@ func (m *manager) restoreStreaming(ctx context.Context) error {
 		return errors.Wrap(err, "failed to list containers")
 	}
 
-	logger.Info("restoring streaming for containers", zap.Any("containers", all))
+	logger.Info("restoring streaming for containers",
+		zap.Any("containers", all))
 
 	for _, c := range all {
 		if c.State == "running" {
@@ -279,4 +293,25 @@ func (m *manager) restoreStreaming(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (m *manager) getColoredString(s string) string {
+	if c, ok := identifierColors[s]; ok {
+		return c.Sprintf("%s", s)
+	}
+
+	c := availableColors[rand.Intn(len(availableColors))]
+	identifierColors[s] = c
+	return c.Sprintf("%s", s)
+}
+
+func (m *manager) ReadMem(filter types.Filter) ([]types.LogEntry, error) {
+	response := make([]types.LogEntry, 0)
+	for _, next := range m.lastEntries.Values() {
+		key := fmt.Sprintf("%s-%s", next.Deployment.ApplicationID, next.Deployment.Environment)
+		if filter.Identifier == key {
+			response = append(response, next.Log)
+		}
+	}
+	return response, nil
 }
