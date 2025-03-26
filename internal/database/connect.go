@@ -1,8 +1,8 @@
 package database
 
 import (
+	"github.com/glebarez/sqlite"
 	"github.com/pkg/errors"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"sarabi/internal/types"
 )
