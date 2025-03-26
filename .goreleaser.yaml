@@ -11,7 +11,6 @@ builds:
     dir: ./cmd
     main: ./main.go
     binary: sarabi-server
-    cgo: true
     goos:
       - linux
       - darwin
