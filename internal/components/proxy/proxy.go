@@ -2,13 +2,9 @@ package proxycomponent
 
 import (
 	"context"
-	"fmt"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"io"
-	"os"
-	"path/filepath"
 	"sarabi/internal/components"
 	"sarabi/internal/integrations/caddy"
 	"sarabi/internal/integrations/docker"
@@ -16,14 +12,7 @@ import (
 )
 
 var (
-	caddyImageName = "docker.io/library/caddy:2.9"
-	// allow only localhost to access caddy via API
-	defaultCaddyApiConfigContent = `
-		{
-			admin :2019
-		}
-		`
-	defaultConfigPath      = "/etc/caddy/Caddyfile"
+	caddyImageName         = "docker.io/library/caddy:2.9"
 	ProxyServerName        = "main-proxy-server"
 	proxyStaticFilesVolume = "sarabi-statics"
 	proxyConfigVolume      = "sarabi-proxy-config"
@@ -84,12 +73,9 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 	portBindings := nat.PortMap{
 		httpPort:  []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "80"}},
 		httpsPort: []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "443"}},
-		apiPort:   []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "2019"}},
+		apiPort:   []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: "2019"}},
 	}
 
-	bindVolumes := []string{
-		fmt.Sprintf("%s:/etc/caddy/Caddyfile", defaultConfigPath),
-	}
 	mounts := map[string]string{
 		proxyStaticFilesVolume: "/var/caddy/share/",
 		proxyConfigVolume:      "/caddy_data",
@@ -98,10 +84,13 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 	params := docker.StartContainerParams{
 		Image:        caddyImageName,
 		Container:    ProxyServerName,
-		Volumes:      bindVolumes,
 		ExposedPorts: exposedPorts,
 		PortBindings: portBindings,
 		Mounts:       mounts,
+		Cmd: []string{
+			// Only allow requests from localhost to the admin API
+			"caddy", "run", "--admin", "127.0.0.1:2019",
+		},
 	}
 	result, err := p.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {
@@ -128,28 +117,4 @@ func (p *proxyComponent) Cleanup(ctx context.Context, result *components.Builder
 		RemoveVolumes: false,
 		ContainerName: result.ID,
 	})
-}
-
-func (p *proxyComponent) writeCaddyInitConfig() error {
-	if _, err := os.Stat(defaultConfigPath); err == nil {
-		if err := os.Remove(defaultConfigPath); err != nil {
-			return err
-		}
-	}
-
-	dir := filepath.Dir(defaultConfigPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	fi, err := os.Create(defaultConfigPath)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.WriteString(fi, defaultCaddyApiConfigContent)
-	if err != nil {
-		return err
-	}
-	return nil
 }
