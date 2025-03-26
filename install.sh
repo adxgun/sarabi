@@ -100,6 +100,12 @@ generate_or_recover_encryption_key() {
 
 # Function to start Sarabi as a service
 start_sarabi_service() {
+# Create data directory for sarabi to store its data
+mkdir -p /var/sarabi/data
+
+# Create SqliteDB file
+touch /var/sarabi/data/database.db
+
   cat <<EOF | sudo tee /etc/systemd/system/sarabi.service > /dev/null
 [Unit]
 Description=Sarabi Service
