@@ -20,3 +20,5 @@ dist/
 main
 sarabi
 docs/.vscode
+test-caddy.json
+*.sarabi.yml

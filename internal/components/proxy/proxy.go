@@ -82,8 +82,10 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 	}
 
 	mounts := map[string]string{
-		proxyStaticFilesVolume: "/var/caddy/share/",
-		proxyConfigVolume:      "/caddy_data",
+		proxyConfigVolume: "/caddy_data",
+	}
+	volumes := []string{
+		"/var/caddy/share/:/var/caddy/share/",
 	}
 
 	params := docker.StartContainerParams{
@@ -95,6 +97,7 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		Cmd: []string{
 			"caddy", "run", "--config", "/etc/caddy/caddy.json", "--resume",
 		},
+		Volumes: volumes,
 	}
 	result, err := p.dockerClient.StartContainerAndWait(ctx, params)
 	if err != nil {

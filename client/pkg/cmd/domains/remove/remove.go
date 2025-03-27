@@ -18,7 +18,7 @@ func NewRemoveDomainCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Co
 		Use:     "remove",
 		Short:   "Remove domain from an application",
 		Long:    "Remove the specified domain name from the application.",
-		Example: "sarabi remove add <fqdn>",
+		Example: "sarabi domains remove <fqdn>",
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) <= 0 {
 				cmdutil.PrintE("please input your FQDN")

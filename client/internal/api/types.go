@@ -16,7 +16,7 @@ type (
 	CreateApplicationParams struct {
 		Name          string   `json:"name" validate:"required"`
 		Domain        string   `json:"domain" validate:"required,fqdn"`
-		StorageEngine []string `json:"storage_engine" validate:"required"`
+		StorageEngine []string `json:"storage_engine"`
 		FePath        string   `json:"frontend"`
 		BePath        string   `json:"backend"`
 	}
