@@ -12,10 +12,15 @@ import (
 )
 
 var (
-	caddyImageName         = "docker.io/library/caddy:2.9"
-	ProxyServerName        = "main-proxy-server"
-	proxyStaticFilesVolume = "sarabi-statics"
-	proxyConfigVolume      = "sarabi-proxy-config"
+	caddyImageName               = "adxgun/sarabi-caddy:2.9-v3"
+	ProxyServerName              = "main-proxy-server"
+	proxyStaticFilesVolume       = "sarabi-statics"
+	proxyConfigVolume            = "sarabi-proxy-config"
+	defaultCaddyApiConfigContent = `
+		{
+			admin 127.0.0.1:2019
+		}
+		`
 )
 
 type (
@@ -88,8 +93,7 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		PortBindings: portBindings,
 		Mounts:       mounts,
 		Cmd: []string{
-			// Only allow requests from localhost to the admin API
-			"caddy", "run", "--admin", "127.0.0.1:2019",
+			"caddy", "run", "--config", "/etc/caddy/caddy.json", "--resume",
 		},
 	}
 	result, err := p.dockerClient.StartContainerAndWait(ctx, params)

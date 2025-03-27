@@ -35,17 +35,18 @@ type ContainerInfo struct {
 }
 
 type StartContainerParams struct {
-	Image        string
-	Container    string
-	Network      *string
-	Volumes      []string
-	Environments []string
-	Cmd          []string
-	ExposedPorts []nat.Port
-	PortBindings nat.PortMap
-	Mounts       map[string]string
-	Resources    types.ResourceAllocation
-	User         string
+	Image         string
+	Container     string
+	Network       *string
+	Volumes       []string
+	Environments  []string
+	Cmd           []string
+	ExposedPorts  []nat.Port
+	PortBindings  nat.PortMap
+	Mounts        map[string]string
+	Resources     types.ResourceAllocation
+	User          string
+	StartCmdInput *string
 }
 
 func (StartContainerParams) DefaultLabels() map[string]string {

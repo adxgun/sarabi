@@ -16,7 +16,7 @@ var (
 	mainAccessListenPort = []string{":80", ":443"}
 	caddyAdminAccessPort = ":2019"
 	mainServer           = "main"
-	caddyUrl             = "http://localhost:2019/config/"
+	caddyUrl             = "http://127.0.0.1:2019/config/"
 )
 
 type Client interface {

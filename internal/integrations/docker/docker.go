@@ -229,6 +229,24 @@ func (d *dockerClient) StartContainerAndWait(ctx context.Context, params StartCo
 		return nil, err
 	}
 
+	if params.StartCmdInput != nil {
+		attachResp, err := d.hostClient.ContainerAttach(ctx, resp.ID, container.AttachOptions{
+			Stream: true,
+			Stdin:  true,
+			Stdout: true,
+			Stderr: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := attachResp.Conn.Write([]byte(*params.StartCmdInput)); err != nil {
+			return nil, err
+		}
+		if err := attachResp.Conn.Close(); err != nil {
+			return nil, err
+		}
+	}
+
 	isRunning, info, err := d.IsContainerRunning(ctx, resp.ID)
 	for !isRunning {
 		time.Sleep(200 * time.Millisecond)

@@ -150,3 +150,7 @@ func FormatURI(dbType, username, password, host, port, dbName string, sslMode st
 
 	return uri
 }
+
+func StrPtr(s string) *string {
+	return &s
+}
