@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
+	"sarabi/build"
 	"sarabi/client/internal/api"
 	"sarabi/client/internal/auth"
 	"sarabi/client/internal/config"
@@ -37,6 +38,7 @@ func New() (*cobra.Command, error) {
 
 			return err
 		},
+		Version: build.Version,
 	}
 
 	if apiClient == nil {

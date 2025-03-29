@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"sarabi/build"
 	"sarabi/internal/eventbus"
 	"sarabi/internal/logs"
 	"sarabi/internal/manager"
@@ -669,5 +670,5 @@ func (handler *ApiHandler) Ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok(w, "success", nil)
+	ok(w, "success", map[string]string{"version": build.Version})
 }

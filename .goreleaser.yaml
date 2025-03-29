@@ -11,6 +11,11 @@ builds:
     dir: ./cmd
     main: ./main.go
     binary: sarabi-server
+    ldflags:
+      -s -w
+      -X build.Version={{.Version}}
+      -X build.Commit={{.ShortCommit}}
+      -X build.Date={{.Date}}
     goos:
       - linux
       - darwin
@@ -23,6 +28,11 @@ builds:
     dir: ./client
     main: ./internal/cmd/main.go
     binary: sarabi
+    ldflags:
+      -s -w
+      -X build.Version={{.Version}}
+      -X build.Commit={{.ShortCommit}}
+      -X build.Date={{.Date}}
     goos:
       - linux
       - darwin

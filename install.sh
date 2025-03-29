@@ -37,6 +37,11 @@ install_docker() {
   sudo systemctl start docker
 }
 
+pull_images() {
+  docker pull adxgun/sarabi-caddy:2.9-v3
+  docker pull grafana/loki:3.3.2
+}
+
 # Function to download the latest Sarabi binary from GitHub releases
 download_sarabi() {
   LATEST_LINUX_URL=$(
@@ -155,6 +160,7 @@ main() {
   get_public_ip
   setup_domain
   install_docker
+  pull_images
   download_sarabi
   generate_access_secret
   generate_or_recover_encryption_key
