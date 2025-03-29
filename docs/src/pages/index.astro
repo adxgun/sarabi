@@ -1,0 +1,40 @@
+---
+// src/pages/index.astro
+import Header from '../components/Header.astro';
+import Features from '../components/Features.astro';
+import CTA from '../components/CTA.astro';
+---
+
+<html lang="en">
+<head>
+  <title>sarabi – Simple Fullstack Deployment for Lazy Devs</title>
+  <meta name="description" content="A lightweight PaaS alternative for deploying fullstack apps with databases, HTTPS, and zero hassle." />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+  <style>
+    :root {
+      --primary: #6d28d9;
+      --hero-gradient: linear-gradient(135deg, #6d28d9 0%, #4c1d95 100%);
+    }
+    .hero {
+      background: var(--hero-gradient);
+      color: white;
+      padding: 4rem 1rem;
+    }
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+
+<body>
+  <Header />
+  <main class="container">
+    <Features />
+    <CTA />
+  </main>
+  <footer class="container">
+    <p><small>✨ Open-source under MIT License | <a href="https://github.com/adxgun/sarabi" target="_blank">GitHub</a></small></p>
+  </footer>
+</body>
+</html>

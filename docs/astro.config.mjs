@@ -9,7 +9,7 @@ export default defineConfig({
     integrations: [starlight({
         title: 'Documentation',
         social: {
-            github: 'https://github.com/adxgun/sarabi/docs',
+            github: 'https://github.com/adxgun/sarabi',
         },
         sidebar: [
             {

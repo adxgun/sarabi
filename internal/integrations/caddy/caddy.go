@@ -187,14 +187,24 @@ func (c *caddyClient) patchFrontendConfig(ctx context.Context, deployment *types
 	routeIdx := c.findRouteIndex(routes, deployment.AccessURL(types.InstanceTypeFrontend))
 	handles := make([]Handle, 0)
 	handles = append(handles, Handle{Handler: "file_server", Root: deployment.SiteContentPath()})
+	hosts := make([]string, 0)
+	domains, err := c.domain.FindForEnvironmentAndInstanceType(ctx, deployment.ApplicationID, deployment.Environment, types.InstanceTypeFrontend)
+	if err != nil {
+		return err
+	}
+
+	for _, next := range domains {
+		hosts = append(hosts, next.Name)
+	}
+	hosts = append(hosts, deployment.AccessURL(types.InstanceTypeFrontend))
 	updatedRoute := Route{
 		Handle: handles,
 		Match: []Match{
-			{Host: []string{deployment.AccessURL(types.InstanceTypeFrontend)}},
+			{Host: hosts},
 		},
 	}
 
-	patchUrl := fmt.Sprintf("%sapps/http/servers/%s/routes/%d", caddyUrl, mainServer, routeIdx)
+	patchUrl := fmt.Sprintf("%sapps/http/servers/%s/routes", caddyUrl, mainServer)
 	if routeIdx == -1 {
 		patchUrl = fmt.Sprintf("%sapps/http/servers/%s/routes", caddyUrl, mainServer)
 		routes = append(routes, updatedRoute)
