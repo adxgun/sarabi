@@ -46,8 +46,12 @@ func (d *databaseComponent) Name() string {
 }
 
 func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
-	logger.Info("running application component: database",
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Run#Database"),
+		zap.Any("deployment_id", deploymentID),
 		zap.String("dockerImage", d.dbProvider.Image()))
+	logger.Info(ctx, "running application component: database")
+
 	deployment, err := d.appService.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return nil, err
@@ -61,6 +65,11 @@ func (d *databaseComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 	if running {
 		return &components.BuilderResult{ID: info.ID, Name: info.Name}, nil
 	}
+
+	// remove existing container if it exists but not running or dead
+	_ = d.dockerClient.StopAndRemoveContainer(ctx, docker.StopContainerParams{
+		ContainerName: d.dbProvider.ContainerName(deployment),
+	})
 
 	resources, err := deployment.Application.ResourcesAllocation(d.dbProvider.Engine())
 	if err != nil {

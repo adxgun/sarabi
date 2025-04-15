@@ -3,6 +3,7 @@ package docker
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -73,7 +74,7 @@ func readRemoteResponse(body io.Reader) ([]RemoteResponse, error) {
 		nextLine := scanner.Text()
 		r := &RemoteResponse{}
 		if err := json.Unmarshal([]byte(nextLine), r); err != nil {
-			logger.Warn("error parsing docker build response",
+			logger.Warn(context.TODO(), "error parsing docker build response",
 				zap.String("line", nextLine))
 		}
 		resp = append(resp, *r)

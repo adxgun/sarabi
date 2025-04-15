@@ -23,15 +23,17 @@ func NewRedis(dc docker.Docker) Executor {
 }
 
 func (m redisBackupExecutor) Execute(ctx context.Context, params Params) (Result, error) {
-	logger.Info("starting redis backup",
-		zap.String("application", params.Application.Name),
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Execute#Redis"),
+		zap.Any("application", params.Application),
 		zap.String("env", params.Environment))
+	logger.Info(ctx, "starting redis backup")
 
 	var st storage.Storage
 	var stType storage.Type
 	var err error
 	if params.StorageCredential == nil {
-		logger.Info("Object storage credential not configured, using File system storage for backup")
+		logger.Info(ctx, "Object storage credential not configured, using File system storage for backup")
 		st = storage.NewFileStorage()
 		stType = storage.TypeFS
 	} else {

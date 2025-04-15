@@ -55,6 +55,10 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		}, nil
 	}
 
+	_ = p.dockerClient.StopAndRemoveContainer(ctx, docker.StopContainerParams{
+		ContainerName: ProxyServerName,
+	})
+
 	err = p.dockerClient.CreateVolume(ctx, proxyStaticFilesVolume)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create static files volume")

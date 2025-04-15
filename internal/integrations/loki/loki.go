@@ -24,7 +24,7 @@ const lokiUrl = "http://127.0.0.1:3100/loki/api/v1/"
 
 func NewClient() Client {
 	return &client{
-		httpClient: integrations.NewHttpClient(lokiUrl),
+		httpClient: integrations.NewHttpClient(lokiUrl, false),
 	}
 }
 

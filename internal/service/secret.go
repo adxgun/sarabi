@@ -141,11 +141,13 @@ func (s *secretService) FindDeploymentSecrets(ctx context.Context, deploymentID 
 }
 
 func (s *secretService) CreateServerConfig(ctx context.Context, params types.CreateServerConfigParams) (*types.ServerConfigResponse, error) {
-	logger.Info("received request to create server config",
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "SecretService#CreateServerConfig"),
 		zap.Any("application_id", params.ApplicationID),
 		zap.String("provider", params.Provider),
 		zap.String("name", params.Name))
 
+	logger.Info(ctx, "received request to create server config")
 	serializedValue, err := json.Marshal(params.Value)
 	if err != nil {
 		return nil, err

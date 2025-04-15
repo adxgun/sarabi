@@ -146,6 +146,10 @@ func (m *manager) GetApplication(ctx context.Context, applicationID *uuid.UUID, 
 }
 
 func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Deploy"),
+		zap.Any("param", param))
+
 	var backendDeployment *types.Deployment
 	var frontendDeployment *types.Deployment
 	var feDomains []string
@@ -182,7 +186,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
 				return errorpkg.Wrap(err, "failed to run database component")
 			}
 
-			m.blockDatabaseAccess(app, dbDeployment, dbPort, se)
+			m.blockDatabaseAccess(ctx, app, dbDeployment, dbPort, se)
 		}
 
 		if err := m.backupService.CreateBackupSettings(ctx, param.ApplicationID, param.Environment, defaultBackupInterval, false); err != nil {
@@ -242,7 +246,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
 		}
 
 		if err := backend.Cleanup(ctx, result); err != nil {
-			logger.Warn("cleanup failed: ", zap.Error(err))
+			logger.Warn(ctx, "cleanup failed: ", zap.Error(err))
 		}
 		beDomains = append(beDomains, m.toURL(backendDeployment.AccessURL(types.InstanceTypeBackend)))
 	}
@@ -254,7 +258,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
 			return errorpkg.Wrap(err, "failed to frontend component")
 		}
 		if err := frontend.Cleanup(ctx, result); err != nil {
-			logger.Warn("cleanup failed: ", zap.Error(err))
+			logger.Warn(ctx, "cleanup failed: ", zap.Error(err))
 		}
 		feDomains = append(feDomains, m.toURL(frontendDeployment.AccessURL(types.InstanceTypeFrontend)))
 	}
@@ -286,6 +290,7 @@ func (m *manager) Deploy(ctx context.Context, param *types.DeployParams) error {
 }
 
 func (m *manager) blockDatabaseAccess(
+	ctx context.Context,
 	app *types.Application,
 	deployment *types.Deployment,
 	dbPort string,
@@ -293,7 +298,7 @@ func (m *manager) blockDatabaseAccess(
 	go func(dPort string, fm firewall.Manager) {
 		port, _ := strconv.Atoi(dPort)
 		if err := fm.BlockPortAccess(uint(port)); err != nil {
-			logger.Info("failed to block port",
+			logger.Info(ctx, "failed to block port",
 				zap.Error(err),
 				zap.String("application", app.Name),
 				zap.String("env", deployment.Environment),
@@ -303,9 +308,11 @@ func (m *manager) blockDatabaseAccess(
 }
 
 func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, environment string, params ...types.CreateSecretParams) error {
-	logger.Info("new update var request",
-		zap.String("application_id", applicationID.String()),
-		zap.String("env", environment))
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "UpdateVariables"),
+		zap.Any("application_id", applicationID),
+		zap.Any("environment", environment))
+	logger.Info(ctx, "new update var request")
 
 	identifier, err := misc.DefaultRandomIdGenerator.Generate(10)
 	if err != nil {
@@ -354,7 +361,6 @@ func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, 
 		return err
 	}
 
-	logger.Info("merged vars", zap.Any("vars", createdVars))
 	err = m.secretService.CreateDeploymentSecrets(ctx, newBackendDeployment.ID, createdVars)
 	if err != nil {
 		return err
@@ -366,13 +372,17 @@ func (m *manager) UpdateVariables(ctx context.Context, applicationID uuid.UUID, 
 		return err
 	}
 	if err := backend.Cleanup(ctx, r); err != nil {
-		logger.Warn("backend cleanup error: ", zap.Error(err))
+		logger.Warn(ctx, "backend cleanup error: ", zap.Error(err))
 	}
 
 	return nil
 }
 
 func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Deployment, error) {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Rollback"),
+		zap.Any("identifier", identifier))
+
 	deployments, err := m.appService.FindDeploymentsByIdentifier(ctx, identifier)
 	if err != nil {
 		return nil, err
@@ -447,7 +457,7 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 		}
 
 		if err := backend.Cleanup(ctx, r); err != nil {
-			logger.Warn("backend cleanup failed: ", zap.Error(err))
+			logger.Warn(ctx, "backend cleanup failed: ", zap.Error(err))
 		}
 		result = append(result, newBeDeployment)
 	}
@@ -476,7 +486,7 @@ func (m *manager) Rollback(ctx context.Context, identifier string) ([]*types.Dep
 		}
 
 		if err := frontend.Cleanup(ctx, r); err != nil {
-			logger.Warn("frontend cleanup failed: ", zap.Error(err))
+			logger.Warn(ctx, "frontend cleanup failed: ", zap.Error(err))
 		}
 		result = append(result, newFeDeployment)
 	}
@@ -554,7 +564,7 @@ func (m *manager) Scale(ctx context.Context, applicationID uuid.UUID, environmen
 	}
 
 	if err := backend.Cleanup(ctx, r); err != nil {
-		logger.Warn("backend cleanup failed: ", zap.Error(err))
+		logger.Warn(ctx, "backend cleanup failed: ", zap.Error(err))
 	}
 
 	return []*types.Deployment{newBeDeployment}, nil
@@ -649,10 +659,13 @@ func (m *manager) ListBackups(ctx context.Context, applicationID uuid.UUID, envi
 }
 
 func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environment string) error {
-	logger.Info("destroying application",
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Destroy"),
+		zap.Any("application_id", applicationID),
 		zap.String("environment", environment),
-		zap.Any("applicationID", applicationID),
 		zap.Bool("destroy_all?", environment == ""))
+
+	logger.Info(ctx, "destroying application")
 
 	application, err := m.appService.Get(ctx, applicationID)
 	if err != nil {
@@ -686,9 +699,9 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 		}
 		err = os.Remove(next.BinPath())
 		if err != nil {
-			logger.Warn("failed to remove deployment bin: ", zap.Error(err))
+			logger.Warn(ctx, "failed to remove deployment bin: ", zap.Error(err))
 		} else {
-			logger.Info("removed deployment bin",
+			logger.Info(ctx, "removed deployment bin",
 				zap.String("path", next.BinPath()))
 		}
 		if err := m.caddyClient.RemoveConfig(ctx, next); err != nil {
@@ -708,12 +721,12 @@ func (m *manager) Destroy(ctx context.Context, applicationID uuid.UUID, environm
 	for _, next := range frontendDeployments {
 		err = os.Remove(next.SiteContentPath())
 		if err != nil {
-			logger.Warn("failed to remove frontend site content for deployment",
+			logger.Warn(ctx, "failed to remove frontend site content for deployment",
 				zap.String("deployment_id", next.ID.String()),
 				zap.String("path", next.SiteContentPath()),
 				zap.Error(err))
 		} else {
-			logger.Info("removed deployment site content",
+			logger.Info(ctx, "removed deployment site content",
 				zap.String("path", next.SiteContentPath()))
 		}
 

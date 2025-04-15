@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"sarabi/logger"
 	"time"
 )
 
@@ -17,13 +19,20 @@ type HttpClient interface {
 type impl struct {
 	client  *http.Client
 	baseUrl string
+	debug   bool
 }
 
-func NewHttpClient(baseUrl string) HttpClient {
-	return impl{client: &http.Client{Timeout: 30 * time.Second}, baseUrl: baseUrl}
+func NewHttpClient(baseUrl string, debug bool) HttpClient {
+	return impl{client: &http.Client{Timeout: 30 * time.Second}, baseUrl: baseUrl, debug: debug}
 }
 
 func (c impl) Do(ctx context.Context, method, requestUrl string, body, response interface{}) error {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "httpClient.Do"),
+		zap.String("url", requestUrl),
+		zap.String("method", method),
+		zap.Any("body", body))
+
 	req, err := http.NewRequestWithContext(ctx, method, c.baseUrl+requestUrl, nil)
 	if err != nil {
 		return err
@@ -47,8 +56,12 @@ func (c impl) Do(ctx context.Context, method, requestUrl string, body, response 
 		}
 	}()
 
+	if c.debug {
+		logger.Info(ctx, "http response")
+	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logger.Error(ctx, "failed to read response body")
 		return err
 	}
 

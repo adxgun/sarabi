@@ -1,14 +1,18 @@
 package logger
 
 import (
+	"context"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"sync"
 )
 
 var (
-	logger *zap.Logger
-	once   sync.Once
+	logger        *zap.Logger
+	once          sync.Once
+	loggerFields  = "logger.fields"
+	RequestFields = "request.fields"
+	FunctionName  = "function.name"
 )
 
 func InitLogger(mode string) error {
@@ -45,16 +49,43 @@ func Sync() {
 	}
 }
 
-func Info(message string, fields ...zap.Field) {
-	GetLogger().Info(message, fields...)
+func Info(ctx context.Context, message string, fields ...zap.Field) {
+	storedFields := FromContext(ctx)
+	storedFields = append(storedFields, fields...)
+	logger.Info(message, storedFields...)
 }
 
 // Warn logs a warning message with optional fields
-func Warn(message string, fields ...zap.Field) {
-	GetLogger().Warn(message, fields...)
+func Warn(ctx context.Context, message string, fields ...zap.Field) {
+	storedFields := FromContext(ctx)
+	storedFields = append(storedFields, fields...)
+	logger.Info(message, storedFields...)
 }
 
 // Error logs an error message with optional fields
-func Error(message string, fields ...zap.Field) {
-	GetLogger().Error(message, fields...)
+func Error(ctx context.Context, message string, fields ...zap.Field) {
+	storedFields := FromContext(ctx)
+	storedFields = append(storedFields, fields...)
+	logger.Info(message, storedFields...)
+}
+
+func With(ctx context.Context, fields ...zap.Field) context.Context {
+	data := ctx.Value(loggerFields)
+	storedFields := make([]zap.Field, 0)
+	if data != nil {
+		storedFields = data.([]zap.Field)
+	}
+
+	storedFields = append(storedFields, fields...)
+	return context.WithValue(ctx, loggerFields, storedFields)
+}
+
+func FromContext(ctx context.Context) []zap.Field {
+	data := ctx.Value(loggerFields)
+	fields := make([]zap.Field, 0)
+	if data != nil {
+		fields = data.([]zap.Field)
+	}
+
+	return fields
 }

@@ -45,7 +45,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("serving http(s) on :" + cfg.Port)
+		logger.Info(context.Background(), "serving http(s) on :"+cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal("server closed: ", err)
 		}
@@ -59,7 +59,7 @@ func main() {
 
 	if teardown != nil {
 		if err := teardown(); err != nil {
-			logger.Error("teardown failed", zap.Error(err))
+			logger.Error(context.Background(), "teardown failed", zap.Error(err))
 		}
 	}
 
@@ -156,7 +156,7 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 			sqlDB, _ := db.DB()
 			if sqlDB != nil {
 				if err = sqlDB.Close(); err != nil {
-					logger.Info("DB closed with error", zap.Error(err))
+					logger.Info(context.Background(), "DB closed with error", zap.Error(err))
 				}
 			}
 			cancel()

@@ -69,12 +69,16 @@ func NewClient(eb eventbus.Bus) (Docker, error) {
 		return nil, errors.Wrap(err, "failed to connect to docker host")
 	}
 
-	logger.Info("docker client connected",
+	logger.Info(context.Background(), "docker client connected",
 		zap.Any("properties", p))
 	return &dockerClient{hostClient: hostClient, eb: eb}, nil
 }
 
 func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deployment) (BuildImageResult, error) {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "BuildImage"),
+		zap.Any("deployment", application))
+
 	d.eb.Broadcast(application.Identifier, eventbus.Info, "Creating Docker build context...")
 	buildCtx, err := bundler.CreateBuildContextFromTar(application.BinPath())
 	if err != nil {
@@ -101,7 +105,7 @@ func (d *dockerClient) BuildImage(ctx context.Context, application *types.Deploy
 		nextLine := scanner.Text()
 		next := &RemoteResponse{}
 		if err := json.Unmarshal(scanner.Bytes(), next); err != nil {
-			logger.Warn("error parsing docker build response",
+			logger.Warn(ctx, "error parsing docker build response",
 				zap.String("line", nextLine))
 			continue
 		}
@@ -398,6 +402,11 @@ func (d *dockerClient) ContainerExec(ctx context.Context, params ContainerExecPa
 
 // CopyFromContainer copies a file from a container to the host
 func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, filePath string) (types.File, error) {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "CopyFromContainer"),
+		zap.String("containerName", containerName),
+		zap.String("filePath", filePath))
+
 	tempFile := fmt.Sprintf("%s.sql", uuid.NewString())
 	containerAndPath := fmt.Sprintf("%s:%s", containerName, filePath)
 	cmd := exec.CommandContext(ctx, "docker", "cp", containerAndPath, tempFile)
@@ -415,8 +424,7 @@ func (d *dockerClient) CopyFromContainer(ctx context.Context, containerName, fil
 		return types.File{}, err
 	}
 
-	logger.Info("copy file from container successful",
-		zap.String("container", containerName),
+	logger.Info(ctx, "copy file from container successful",
 		zap.Any("size", stat.Size()),
 		zap.String("name", stat.Name()))
 

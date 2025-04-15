@@ -75,6 +75,10 @@ func (b backupService) Run(ctx context.Context) error {
 }
 
 func (b backupService) run(ctx context.Context, settings *types.BackupSettings) error {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "BackupService#run"),
+		zap.Any("settings", settings))
+
 	application, err := b.applicationService.Get(ctx, settings.ApplicationID)
 	if err != nil {
 		return err
@@ -113,14 +117,13 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 		}
 		result, err := bk.Execute(ctx, param)
 		if err != nil {
-			logger.Error("backup returned error",
+			logger.Error(ctx, "backup returned error",
 				zap.Error(err),
 				zap.String("application", application.Name),
 				zap.Any("storage_engine", se))
 		} else {
-			logger.Info("backup completed",
+			logger.Info(ctx, "backup completed",
 				zap.String("application", application.Name),
-				zap.String("environment", settings.Environment),
 				zap.String("engine", string(se)),
 				zap.String("ts", time.Now().String()))
 
@@ -135,7 +138,7 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 				Size:          result.Size,
 			}
 			if err := b.backupRepository.Save(ctx, newBackup); err != nil {
-				logger.Error("failed to save backup", zap.Error(err))
+				logger.Error(ctx, "failed to save backup", zap.Error(err))
 			}
 		}
 	}
@@ -146,7 +149,7 @@ func (b backupService) run(ctx context.Context, settings *types.BackupSettings) 
 func (b backupService) runBG(ctx context.Context, settings *types.BackupSettings) error {
 	go func() {
 		if err := b.run(ctx, settings); err != nil {
-			logger.Info("run failed", zap.Error(err))
+			logger.Info(ctx, "run failed", zap.Error(err))
 		}
 	}()
 	return nil
@@ -161,10 +164,8 @@ func (b backupService) runScheduler(ctx context.Context, bc *types.BackupSetting
 		return err
 	}
 
-	logger.Info("backup job queued",
-		zap.String("Name", job.Name()),
-		zap.String("expression", bc.CronExpression),
-		zap.String("environment", bc.Environment))
+	logger.Info(ctx, "backup job queued",
+		zap.String("Name", job.Name()))
 	b.scheduler.Start()
 	return nil
 }

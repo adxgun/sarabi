@@ -46,6 +46,9 @@ func (b *backendComponent) Name() string {
 }
 
 func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Run#Backend"),
+		zap.Any("deployment_id", deploymentID))
 	deployment, err := b.appService.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return nil, err
@@ -100,7 +103,7 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 			if err != nil {
 				return err
 			}
-			logger.Info("started instance",
+			logger.Info(ctx, "started instance",
 				zap.Int("index", idx),
 				zap.String("component", b.Name()),
 				zap.Any("result", newInfo))
@@ -119,7 +122,7 @@ func (b *backendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*co
 	}
 
 	if err := b.dockerClient.ConnectContainer(context.Background(), proxycomponent.ProxyServerName, deployment.NetworkName()); err != nil {
-		logger.Warn("container connection error: ", zap.Error(err))
+		logger.Warn(ctx, "container connection error: ", zap.Error(err))
 	}
 
 	return &components.BuilderResult{

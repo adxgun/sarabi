@@ -84,7 +84,7 @@ func (c *caddyClient) Wait(ctx context.Context) error {
 	for i := 0; i < retries; i++ {
 		err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, nil)
 		if err == nil {
-			logger.Info("caddy is now available")
+			logger.Info(ctx, "caddy is now available")
 			return nil
 		}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"sarabi/internal/integrations/docker"
 	"sarabi/internal/integrations/loki"
 	"sarabi/internal/service"
+	"sarabi/logger"
 )
 
 const (
@@ -39,6 +41,11 @@ func (l *logCollector) Name() string {
 }
 
 func (l *logCollector) Run(ctx context.Context, deploymentID uuid.UUID) (*components.BuilderResult, error) {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Run#LogCollector"),
+		zap.Any("deployment_id", deploymentID))
+	logger.Info(ctx, "running application component: log collector")
+
 	running, info, err := l.dc.IsContainerRunning(ctx, l.Name())
 	if err != nil {
 		return nil, err
@@ -47,6 +54,11 @@ func (l *logCollector) Run(ctx context.Context, deploymentID uuid.UUID) (*compon
 	if running {
 		return &components.BuilderResult{ID: info.ID, Name: info.Name}, nil
 	}
+
+	// remove existing container if it exists but not running or dead
+	_ = l.dc.StopAndRemoveContainer(ctx, docker.StopContainerParams{
+		ContainerName: l.Name(),
+	})
 
 	if err := l.fixOwnership(ctx); err != nil {
 		return nil, err

@@ -79,6 +79,10 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := logger.With(r.Context(),
+		zap.Any("request", body),
+		zap.String(logger.FunctionName, "ApiHandler#Deploy"))
+
 	param := &types.DeployParams{
 		ApplicationID: body.ApplicationID,
 		Instances:     body.Instances,
@@ -98,7 +102,7 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 
 		file, err := ff.Open()
 		if err != nil {
-			logger.Error("failed to process deployment upload: ",
+			logger.Error(ctx, "failed to process deployment upload: ",
 				zap.Error(err))
 			badRequest(w, errors.New("failed to open file upload"))
 			return
@@ -115,8 +119,7 @@ func (handler *ApiHandler) Deploy(w http.ResponseWriter, r *http.Request) {
 
 	ch := handler.eb.Register(identifier)
 
-	logger.Info("starting deployment",
-		zap.Any("application_id", param.ApplicationID))
+	logger.Info(ctx, "starting deployment")
 	go func(ctx context.Context) {
 		err = handler.mn.Deploy(ctx, param)
 		if err != nil {
@@ -407,7 +410,7 @@ func (handler *ApiHandler) Destroy(w http.ResponseWriter, r *http.Request) {
 
 	err = handler.mn.Destroy(ctx, applicationID, body.Environment)
 	if err != nil {
-		logger.Error("destroy failed",
+		logger.Error(r.Context(), "destroy failed",
 			zap.Error(err))
 		serverError(w, err)
 		return
@@ -616,7 +619,8 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	identifier := fmt.Sprintf("%s-%s", applicationID, environment)
-	lg := handler.logger.With(
+	ctx := logger.With(r.Context(),
+		zap.String(logger.FunctionName, "ApiHandler#TailLogs"),
 		zap.String("identifier", identifier),
 		zap.String("environment", environment),
 		zap.Any("application_id", applicationID),
@@ -641,7 +645,7 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := handler.eb.Register(identifier)
-	lg.Info("registered client for log stream")
+	logger.Info(ctx, "registered client for log stream")
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -657,7 +661,7 @@ func (handler *ApiHandler) TailLogs(w http.ResponseWriter, r *http.Request) {
 
 			_ = writeSSELine(w, logEntry)
 		case <-r.Context().Done():
-			logger.Info("client disconnected")
+			logger.Info(ctx, "client disconnected")
 			return
 		}
 	}

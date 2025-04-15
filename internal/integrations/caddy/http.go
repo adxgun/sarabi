@@ -25,6 +25,11 @@ func newCaddyHttpClient() HttpClient {
 }
 
 func (c caddyHttpClient) Do(ctx context.Context, method, requestUrl string, body, response interface{}) error {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "caddyHttpClient.Do"),
+		zap.String("url", requestUrl),
+		zap.Any("body", body))
+
 	req, err := http.NewRequestWithContext(ctx, method, requestUrl, nil)
 	if err != nil {
 		return err
@@ -34,10 +39,7 @@ func (c caddyHttpClient) Do(ctx context.Context, method, requestUrl string, body
 		if err != nil {
 			return err
 		}
-		logger.Info("caddy request",
-			zap.String("url", requestUrl),
-			zap.String("req", string(bodyBin)),
-			zap.Any("headers", req.Header))
+		logger.Info(ctx, "caddy request")
 		req.Body = io.NopCloser(bytes.NewBuffer(bodyBin))
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -49,7 +51,7 @@ func (c caddyHttpClient) Do(ctx context.Context, method, requestUrl string, body
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			logger.Warn("failed to close response body",
+			logger.Warn(ctx, "failed to close response body",
 				zap.Error(err))
 		}
 	}()
@@ -59,7 +61,7 @@ func (c caddyHttpClient) Do(ctx context.Context, method, requestUrl string, body
 		return err
 	}
 
-	logger.Info("caddy response",
+	logger.Info(ctx, "caddy response",
 		zap.String("response", string(responseBody)))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return fmt.Errorf("request failed: %s", string(responseBody))

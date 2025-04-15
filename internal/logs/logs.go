@@ -90,8 +90,11 @@ func NewManager(
 }
 
 func (m *manager) Watch(ctx context.Context) {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Watch"))
+
 	if err := m.restoreStreaming(ctx); err != nil {
-		logger.Error("failed to restore streaming",
+		logger.Error(ctx, "failed to restore streaming",
 			zap.Error(err))
 	}
 
@@ -105,12 +108,12 @@ func (m *manager) Watch(ctx context.Context) {
 			m.handleContainerEvent(ctx, ev)
 		case err := <-errChan:
 			if err != nil {
-				logger.Error("container events error",
+				logger.Error(ctx, "container events error",
 					zap.Error(err))
 			}
 			evChan, errChan = m.tryReconnect()
 		case <-ctx.Done():
-			logger.Info("stopping logs manager...")
+			logger.Info(ctx, "stopping logs manager...")
 			break
 		}
 	}
@@ -140,14 +143,14 @@ func (m *manager) handleContainerEvent(ctx context.Context, ev events.Message) {
 	case containerStart:
 		go func(ctx context.Context, id *types.ContainerIdentity) {
 			if err := m.startStreaming(ctx, id); err != nil {
-				logger.Error("startStreaming: container log streaming error",
+				logger.Error(ctx, "startStreaming: container log streaming error",
 					zap.Error(err))
 			}
 		}(ctx, identity)
 	case containerDestroy:
 		go func(ctx context.Context, id *types.ContainerIdentity) {
 			if err := m.stopStreaming(ctx, id); err != nil {
-				logger.Error("stopStreaming: container log streaming error",
+				logger.Error(ctx, "stopStreaming: container log streaming error",
 					zap.Error(err))
 			}
 		}(ctx, identity)
@@ -155,7 +158,7 @@ func (m *manager) handleContainerEvent(ctx context.Context, ev events.Message) {
 }
 
 func (m *manager) startStreaming(ctx context.Context, identity *types.ContainerIdentity) error {
-	logger.Info("starting log streaming",
+	logger.Info(ctx, "starting log streaming",
 		zap.Any("identity", identity))
 	deployment, err := m.applicationService.GetDeployment(ctx, identity.DeploymentID)
 	if err != nil {
@@ -187,7 +190,7 @@ func (m *manager) startStreaming(ctx context.Context, identity *types.ContainerI
 				m.broadcast(entry, deployment.Application.ID, deployment.Environment)
 
 				if err := scanner.Err(); err != nil {
-					logger.Warn("log scanner error", zap.Error(err))
+					logger.Warn(ctx, "log scanner error", zap.Error(err))
 					break
 				}
 			}
@@ -252,7 +255,7 @@ func (m *manager) sendBatches(ctx context.Context, batches map[string][]types.Ba
 			next100Batch[key] = next[i:end]
 			err := m.lokiClient.Push(ctx, next100Batch)
 			if err != nil {
-				logger.Error("failed to push logs to loki.", zap.Error(err))
+				logger.Error(ctx, "failed to push logs to loki.", zap.Error(err))
 			}
 		}
 	}
@@ -273,7 +276,7 @@ func (m *manager) restoreStreaming(ctx context.Context) error {
 		return errors.Wrap(err, "failed to list containers")
 	}
 
-	logger.Info("restoring streaming for containers",
+	logger.Info(ctx, "restoring streaming for containers",
 		zap.Any("containers", all))
 
 	for _, c := range all {
@@ -285,7 +288,7 @@ func (m *manager) restoreStreaming(ctx context.Context) error {
 
 			go func(ctx context.Context, id *types.ContainerIdentity) {
 				if err := m.startStreaming(ctx, id); err != nil {
-					logger.Error("startStreaming: container log streaming error",
+					logger.Error(ctx, "startStreaming: container log streaming error",
 						zap.Error(err))
 				}
 			}(ctx, identity)

@@ -25,9 +25,12 @@ func NewMysql(dc docker.Docker) Executor {
 }
 
 func (m mysqlBackupExecutor) Execute(ctx context.Context, params Params) (Result, error) {
-	logger.Info("starting mysql backup",
-		zap.String("application", params.Application.Name),
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Execute#Mysql"),
+		zap.Any("application", params.Application),
 		zap.String("env", params.Environment))
+	logger.Info(ctx, "starting mysql backup")
+
 	username, err := findVar("MYSQL_USER", params.DatabaseVars)
 	if err != nil {
 		return Result{}, err
@@ -46,7 +49,7 @@ func (m mysqlBackupExecutor) Execute(ctx context.Context, params Params) (Result
 	var st storage.Storage
 	var stType storage.Type
 	if params.StorageCredential == nil {
-		logger.Info("Object storage credential not configured, using File system storage for backup")
+		logger.Info(ctx, "Object storage credential not configured, using File system storage for backup")
 		st = storage.NewFileStorage()
 		stType = storage.TypeFS
 	} else {

@@ -77,6 +77,10 @@ func (f *frontendComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*c
 }
 
 func (f *frontendComponent) Cleanup(ctx context.Context, result *components.BuilderResult) error {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Cleanup#Frontend"),
+		zap.Any("result", result))
+
 	if result == nil || len(result.PreviousActive) == 0 {
 		return nil
 	}
@@ -84,7 +88,7 @@ func (f *frontendComponent) Cleanup(ctx context.Context, result *components.Buil
 	for _, p := range result.PreviousActive {
 		err := f.appService.UpdateDeploymentStatus(ctx, p.ID, types.DeploymentStatusStopped)
 		if err != nil {
-			logger.Warn("failed to update deployment status",
+			logger.Warn(ctx, "failed to update deployment status",
 				zap.Error(err), zap.String("component", f.Name()))
 		}
 	}
