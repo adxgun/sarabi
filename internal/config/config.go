@@ -9,21 +9,22 @@ type Config struct {
 	// AccessKey is the master access key to the server. Must be kept safe and secure!
 	AccessKey string
 
-	ServerSSLCertFile, ServerSSLKeyFile string
-
 	DatabasePath string
+	Domain       string
+	Port         string
 }
 
 func New() Config {
-	return Config{
-		AccessKey:         os.Getenv("ACCESS_KEY"),
-		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
-		ServerSSLCertFile: os.Getenv("SERVER_SSL_KEY_FILE"),
-		ServerSSLKeyFile:  os.Getenv("SERVER_SSL_CERT_FILE"),
-		DatabasePath:      "/var/sarabi/data/database.db",
+	port := os.Getenv("SARABI_PORT")
+	if port == "" {
+		port = "3646"
 	}
-}
 
-func (c Config) HasTLSConfig() bool {
-	return c.ServerSSLCertFile != "" && c.ServerSSLKeyFile != ""
+	return Config{
+		AccessKey:     os.Getenv("ACCESS_KEY"),
+		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
+		Domain:        os.Getenv("SARABI_DOMAIN"),
+		Port:          port,
+		DatabasePath:  "/var/sarabi/data/database.db",
+	}
 }

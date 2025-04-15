@@ -108,11 +108,6 @@ func (p *proxyComponent) Run(ctx context.Context, deploymentID uuid.UUID) (*comp
 		return nil, errors.Wrap(err, "caddy failed to start")
 	}
 
-	// TODO: init caddy based on its saved state
-	if err := p.caddyClient.Init(ctx); err != nil {
-		return nil, errors.Wrap(err, "caddy failed to init")
-	}
-
 	return &components.BuilderResult{
 		ID:   result.ID,
 		Name: result.Name,

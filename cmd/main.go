@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"sarabi/internal/bundler"
@@ -43,15 +45,9 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("serving http(s) on :3646")
-		if cfg.HasTLSConfig() {
-			if err := srv.ListenAndServeTLS(cfg.ServerSSLCertFile, cfg.ServerSSLKeyFile); err != nil {
-				log.Fatal("server closed: ", err)
-			}
-		} else {
-			if err := srv.ListenAndServe(); err != nil {
-				log.Fatal("server closed: ", err)
-			}
+		logger.Info("serving http(s) on :" + cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal("server closed: ", err)
 		}
 	}()
 
@@ -103,7 +99,7 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 	appService := service.NewApplicationService(appRepo, deploymentRepo)
 	secretService := service.NewSecretService(encryptor, secretRepo, deploymentSecretRepo, credentialRepo)
 	domainService := service.NewDomainService(domainRepo)
-	caddyClient := caddy.NewClient(eventBus, domainService)
+	caddyClient := caddy.NewClient(eventBus, domainService, cfg)
 
 	logCollector := logcollector.New(docker, lokiClient, secretService)
 	if _, err := logCollector.Run(ctx, uuid.Nil); err != nil {
@@ -132,20 +128,36 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 		logsManager.Watch(ctx)
 	}()
 
+	// TODO: init caddy based on its saved state
+	if err := caddyClient.Init(ctx); err != nil {
+		return nil, errors.Wrap(err, "caddy failed to init"), nil
+	}
+
+	if cfg.Domain != "" {
+		_, err = url.Parse(cfg.Domain)
+		if err != nil {
+			return nil, fmt.Errorf("invalid domain URL: %w", err), nil
+		}
+		if err := caddyClient.SetupSarabiAccess(ctx, cfg.Domain); err != nil {
+			return nil, err, nil
+		}
+	}
+
 	mn := manager.New(appService, secretService, docker, caddyClient,
 		bundler.NewArtifactStore(), domainService, backupSvc, fm, naRepository, eventBus, cfg)
 	apiHandler := httphandlers.NewApiHandler(mn, logsManager, eventBus, logger.GetLogger())
 	routes := httphandlers.Routes(apiHandler)
 
-	addr := ":3646"
+	addr := fmt.Sprintf(":%s", cfg.Port)
 	return &http.Server{
 			Addr:    addr,
 			Handler: routes,
 		}, nil, func() error {
 			sqlDB, _ := db.DB()
 			if sqlDB != nil {
-				err = sqlDB.Close()
-				logger.Info("DB Closed", zap.Error(err))
+				if err = sqlDB.Close(); err != nil {
+					logger.Info("DB closed with error", zap.Error(err))
+				}
 			}
 			cancel()
 			// return caddyProxy.Cleanup(context.Background(), result)

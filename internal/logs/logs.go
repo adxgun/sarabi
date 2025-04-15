@@ -98,7 +98,7 @@ func (m *manager) Watch(ctx context.Context) {
 	go m.aggregator(ctx)
 	go m.flusher(ctx)
 
-	evChan, errChan := m.dockerClient.ContainerEvents(context.Background())
+	evChan, errChan := m.dockerClient.ContainerEvents(ctx)
 	for {
 		select {
 		case ev := <-evChan:

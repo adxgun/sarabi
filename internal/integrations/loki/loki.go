@@ -20,7 +20,7 @@ type client struct {
 	httpClient integrations.HttpClient
 }
 
-const lokiUrl = "http://localhost:3100/loki/api/v1/"
+const lokiUrl = "http://127.0.0.1:3100/loki/api/v1/"
 
 func NewClient() Client {
 	return &client{

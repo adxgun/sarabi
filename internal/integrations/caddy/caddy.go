@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sarabi/internal/config"
 	"sarabi/internal/eventbus"
 	"sarabi/internal/misc"
 	"sarabi/internal/service"
@@ -25,16 +26,18 @@ type Client interface {
 	ApplyDomainConfig(ctx context.Context, domain *types.Domain, deployment *types.Deployment, op types.DomainOperation) error
 	RemoveConfig(ctx context.Context, deployment *types.Deployment) error
 	Wait(ctx context.Context) error
+	SetupSarabiAccess(ctx context.Context, domain string) error
 }
 
 type caddyClient struct {
 	httpClient HttpClient
 	eb         eventbus.Bus
 	domain     service.DomainService
+	cfg        config.Config
 }
 
-func NewClient(eb eventbus.Bus, ds service.DomainService) Client {
-	return &caddyClient{httpClient: newCaddyHttpClient(), eb: eb, domain: ds}
+func NewClient(eb eventbus.Bus, ds service.DomainService, cfg config.Config) Client {
+	return &caddyClient{httpClient: newCaddyHttpClient(), eb: eb, domain: ds, cfg: cfg}
 }
 
 func (c *caddyClient) Init(ctx context.Context) error {
@@ -204,7 +207,7 @@ func (c *caddyClient) patchFrontendConfig(ctx context.Context, deployment *types
 		},
 	}
 
-	patchUrl := fmt.Sprintf("%sapps/http/servers/%s/routes", caddyUrl, mainServer)
+	patchUrl := fmt.Sprintf("%sapps/http/servers/%s/routes/%d", caddyUrl, mainServer, routeIdx)
 	if routeIdx == -1 {
 		patchUrl = fmt.Sprintf("%sapps/http/servers/%s/routes", caddyUrl, mainServer)
 		routes = append(routes, updatedRoute)
@@ -241,4 +244,37 @@ func (c *caddyClient) findRouteIndex(routes []Route, host string) int {
 		}
 	}
 	return -1
+}
+
+func (c *caddyClient) SetupSarabiAccess(ctx context.Context, domain string) error {
+	/*cfg := &Config{}
+	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
+	if err != nil {
+		return err
+	}
+
+	routes := cfg.Apps.HTTP.Servers[mainServer].Routes
+	routeIdx := c.findRouteIndex(routes, domain)
+	upStreams := []Upstream{
+		{Dial: fmt.Sprintf("localhost:%s", c.cfg.Port)},
+	}
+
+	handles := []Handle{
+		{Handler: "reverse_proxy", Upstreams: upStreams},
+	}
+	updatedRoute := Route{
+		Handle: handles,
+		Match: []Match{
+			{Host: []string{domain}},
+		},
+	}
+
+	patchUrl := fmt.Sprintf("%sapps/http/servers/%s/routes/%d", caddyUrl, mainServer, routeIdx)
+	if routeIdx == -1 {
+		patchUrl = fmt.Sprintf("%sapps/http/servers/%s/routes", caddyUrl, mainServer)
+		routes = append(routes, updatedRoute)
+		return c.httpClient.Do(ctx, "PATCH", patchUrl, routes, nil)
+	}
+	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)*/
+	return nil
 }
