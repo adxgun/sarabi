@@ -2,7 +2,9 @@
 
 > **A simple, fullstack application deployment tool for lazy devs.**
 
-sarabi is a full-stack application deployment tool designed with simplicity and security in mind. It aims to streamline the deployment process for small-scale applications by requiring minimal configuration. With sarabi, multiple applications— including static websites— can be managed on a single server effortlessly. Unlike more complex tools (like Kubernetes) that demand significant expertise, sarabi provides a lightweight, straightforward solution for smaller-scale projects.
+[![asciicast](https://asciinema.org/a/715968.svg)](https://asciinema.org/a/715968)
+
+sarabi is a full-stack application deployment tool designed with simplicity and security in mind. It aims to streamline the deployment process for small-scale applications by requiring minimal configuration. With sarabi, multiple applications— including static websites— can be managed on a single server effortlessly.
 
 ---
 
