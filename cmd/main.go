@@ -128,7 +128,6 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 		logsManager.Watch(ctx)
 	}()
 
-	// TODO: init caddy based on its saved state
 	if err := caddyClient.Init(ctx); err != nil {
 		return nil, errors.Wrap(err, "caddy failed to init"), nil
 	}
@@ -153,14 +152,18 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 			Addr:    addr,
 			Handler: routes,
 		}, nil, func() error {
-			sqlDB, _ := db.DB()
-			if sqlDB != nil {
+			// save caddy config for restoration on next run
+			if err := caddyClient.SaveSnapshot(context.Background()); err != nil {
+				logger.Error(context.Background(), "failed to save caddy config", zap.Error(err))
+			}
+
+			if sqlDB, _ := db.DB(); sqlDB != nil {
 				if err = sqlDB.Close(); err != nil {
 					logger.Info(context.Background(), "DB closed with error", zap.Error(err))
 				}
 			}
+
 			cancel()
-			// return caddyProxy.Cleanup(context.Background(), result)
 			return nil
 		}
 }

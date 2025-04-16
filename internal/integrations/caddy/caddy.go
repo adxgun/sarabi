@@ -2,12 +2,17 @@ package caddy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
+	"io"
+	"os"
 	"sarabi/internal/config"
 	"sarabi/internal/eventbus"
 	"sarabi/internal/misc"
 	"sarabi/internal/service"
+	"sarabi/internal/storage"
 	types "sarabi/internal/types"
 	"sarabi/logger"
 	"time"
@@ -27,6 +32,7 @@ type Client interface {
 	RemoveConfig(ctx context.Context, deployment *types.Deployment) error
 	Wait(ctx context.Context) error
 	SetupSarabiAccess(ctx context.Context, domain string) error
+	SaveSnapshot(ctx context.Context) error
 }
 
 type caddyClient struct {
@@ -41,6 +47,15 @@ func NewClient(eb eventbus.Bus, ds service.DomainService, cfg config.Config) Cli
 }
 
 func (c *caddyClient) Init(ctx context.Context) error {
+	ctx = logger.With(ctx,
+		zap.String(logger.FunctionName, "Init#Caddy"))
+
+	cfg, err := c.restoreConfigFromSnapShot()
+	if err == nil {
+		logger.Info(ctx, "restoring caddy configuration from snapshot", zap.Any("config", cfg))
+		return c.httpClient.Do(ctx, "POST", caddyUrl, cfg, nil)
+	}
+
 	initConfig := Config{
 		Apps: Apps{
 			HTTP: HTTP{Servers: map[string]Server{
@@ -55,6 +70,7 @@ func (c *caddyClient) Init(ctx context.Context) error {
 		},
 	}
 
+	logger.Info(ctx, "initializing caddy configuration")
 	return c.httpClient.Do(ctx, "POST", caddyUrl, initConfig, nil)
 }
 
@@ -277,4 +293,47 @@ func (c *caddyClient) SetupSarabiAccess(ctx context.Context, domain string) erro
 	}
 	return c.httpClient.Do(ctx, "PATCH", patchUrl, updatedRoute, nil)*/
 	return nil
+}
+
+func (c *caddyClient) SaveSnapshot(ctx context.Context) error {
+	cfg := &Config{}
+	err := c.httpClient.Do(ctx, "GET", caddyUrl, nil, cfg)
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+
+	snapshotFile := fmt.Sprintf("%s/caddy.snapshot", storage.Path)
+	fi, err := os.Create(snapshotFile)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.WriteString(fi, string(data))
+	return err
+}
+
+func (c *caddyClient) restoreConfigFromSnapShot() (Config, error) {
+	snapshotFile := fmt.Sprintf("%s/caddy.snapshot", storage.Path)
+	fi, err := os.Open(snapshotFile)
+	if err != nil {
+		return Config{}, err
+	}
+
+	defer fi.Close()
+	data, err := io.ReadAll(fi)
+	if err != nil {
+		return Config{}, err
+	}
+
+	var cfg Config
+	err = json.Unmarshal(data, &cfg)
+	if err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }

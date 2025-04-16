@@ -1,7 +1,7 @@
 package caddy
 
 type Config struct {
-	Apps  Apps        `json:"apps"`
+	Apps  Apps        `json:"apps,omitempty"`
 	Admin AdminConfig `json:"admin,omitempty"`
 }
 

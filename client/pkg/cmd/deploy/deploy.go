@@ -109,6 +109,10 @@ func NewDeployCmd(svc api.Service, cfg config.ApplicationConfig) *cobra.Command 
 }
 
 func handleDeployEvent(ev api.Event, cancel context.CancelFunc) {
+	if strings.TrimSpace(ev.Message) == "" {
+		return
+	}
+
 	switch ev.Type {
 	case api.Info:
 		cmdutil.Print(strings.Trim(ev.Message, "\n"))
