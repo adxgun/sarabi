@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -13,7 +14,7 @@ import (
 
 // Encryptor handles encryption and decryption of application variables/secrets
 type Encryptor interface {
-	GenerateKey() ([]byte, error)
+	GenerateKey() ([32]byte, error)
 	Encrypt(data string) (string, error)
 	Decrypt(data string) (string, error)
 }
@@ -36,39 +37,38 @@ func NewEncryptor(key string) Encryptor {
 // this function checks for an existing key and return that if available.
 // the generated key should be kept safe outside of this server(aka storage) in-case of data loss, in order to be able to retrieve
 // encrypted data(mainly application variables/secrets)
-func (e *encryptor) GenerateKey() ([]byte, error) {
+func (e *encryptor) GenerateKey() ([32]byte, error) {
+	var key [32]byte
 	if e.encryptionKey != "" {
-		return []byte(e.encryptionKey), nil
+		return sha256.Sum256([]byte(e.encryptionKey)), nil
 	}
 
-	if _, err := os.Stat(encryptionKeyFile); err == nil {
-		f, err := os.Open(encryptionKeyFile)
+	// Try reading from key file if it exists
+	if data, err := os.ReadFile(encryptionKeyFile); err == nil {
+		decoded, err := hex.DecodeString(string(data))
 		if err != nil {
-			return nil, err
+			return key, fmt.Errorf("failed to decode key from file: %w", err)
 		}
-
-		content, err := io.ReadAll(f)
-		if err != nil {
-			return nil, err
+		if len(decoded) != 32 {
+			return key, fmt.Errorf("invalid key length from file: got %d bytes, want 32", len(decoded))
 		}
-		return hex.DecodeString(string(content))
+		copy(key[:], decoded)
+		return key, nil
 	}
 
-	handle, err := os.Create(encryptionKeyFile)
-	if err != nil {
-		return nil, err
+	// Generate new key
+	randomKey := make([]byte, 32)
+	if _, err := rand.Read(randomKey); err != nil {
+		return key, fmt.Errorf("failed to generate key: %w", err)
 	}
 
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return nil, fmt.Errorf("failed to generate key: %v", err)
+	// Save new key to file
+	keyHex := hex.EncodeToString(randomKey)
+	if err := os.WriteFile(encryptionKeyFile, []byte(keyHex), 0600); err != nil {
+		return key, fmt.Errorf("failed to write key to file: %w", err)
 	}
 
-	keyHex := hex.EncodeToString(key)
-	_, err = io.WriteString(handle, keyHex)
-	if err != nil {
-		return nil, err
-	}
+	copy(key[:], randomKey)
 	return key, nil
 }
 
@@ -78,7 +78,7 @@ func (e *encryptor) Encrypt(data string) (string, error) {
 		return "", err
 	}
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +108,7 @@ func (e *encryptor) Decrypt(data string) (string, error) {
 		return "", err
 	}
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return "", err
 	}

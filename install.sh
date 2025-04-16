@@ -80,7 +80,7 @@ generate_or_recover_encryption_key() {
     ENCRYPTION_KEY=$(sudo cat "$ENCRYPTION_KEY_FILE")
   else
     echo "🔑 Generating a new encryption key..."
-    ENCRYPTION_KEY=$(openssl rand -hex 32)
+    ENCRYPTION_KEY=$(openssl rand -base64 32)
     echo "$ENCRYPTION_KEY" | sudo tee "$ENCRYPTION_KEY_FILE" > /dev/null
     sudo chmod 600 "$ENCRYPTION_KEY_FILE" # Restrict access to the key file
   fi
