@@ -2,12 +2,11 @@
 
 > **A simple, fullstack application deployment tool for lazy devs.**
 
-[![asciicast](https://asciinema.org/a/715968.svg)](https://asciinema.org/a/715968)
-
 sarabi is a full-stack application deployment tool designed with simplicity and security in mind. It aims to streamline the deployment process for small-scale applications by requiring minimal configuration. With sarabi, multiple applications— including static websites— can be managed on a single server effortlessly.
 
----
+[![asciicast](https://asciinema.org/a/715968.svg)](https://asciinema.org/a/715968)
 
+---
 ## 🙋‍♀️ Who Can Use sarabi
 
 sarabi is ideal for:
