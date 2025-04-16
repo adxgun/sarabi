@@ -1,4 +1,4 @@
-# 🦁 sarabi
+# sarabi
 
 > **A simple, fullstack application deployment tool for lazy devs.**
 
@@ -7,17 +7,17 @@ sarabi is a full-stack application deployment tool designed with simplicity and 
 [![asciicast](https://asciinema.org/a/715968.svg)](https://asciinema.org/a/715968)
 
 ---
-## 🙋‍♀️ Who Can Use sarabi
+## Who Can Use sarabi
 
 sarabi is ideal for:
-- 🚀 **Small to medium traffic web applications**
-- 🔒 **Internal services**
-- 💼 **Application development agencies** seeking a smarter way to manage client deployments
-- 💡 **Solo entrepreneurs** looking to optimize costs by staying lean
+- **Small to medium traffic web applications**
+- **Internal services**
+- **Application development agencies** seeking a smarter way to manage client deployments
+- **Solo entrepreneurs** looking to optimize costs by staying lean
 
 ---
 
-## ⭐ Key Features
+## Key Features
 
 - **Language Agnostic:** Deploy web applications written in any programming language with just a `Dockerfile`.
 - **Full-Stack Deployment:** Supports deploying both service APIs and frontend (static files) in a single step.
@@ -33,7 +33,7 @@ sarabi is ideal for:
 
 ---
 
-## 🔍 How sarabi Stands Out from Existing PaaS Tools
+## How sarabi Stands Out from Existing PaaS Tools
 
 - **Full-Stack Deployment Made Easy:** Unlike many PaaS tools that require separate solutions for backend and static frontend hosting, sarabi integrates both. It uses a single Caddy instance to serve your frontend and backend with automatic HTTPS.
 - **Unlimited Environments:** Create as many environments as you need (e.g., `dev`, `prod`, `pr-123`) without maintaining separate configuration files. Each environment has unique access URLs, databases, and configurations.
@@ -43,8 +43,7 @@ sarabi is ideal for:
 ---
 
 ## 🚀 Getting Started
-
-Head to https://sarabi.dev/docs to get started!
+Head to https://doc.sarabi.dev/ to get started!
 
 ## Contributing
 Contributions are welcome!
