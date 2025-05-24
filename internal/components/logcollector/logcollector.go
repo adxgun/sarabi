@@ -13,6 +13,7 @@ import (
 	"sarabi/internal/components"
 	"sarabi/internal/integrations/docker"
 	"sarabi/internal/integrations/loki"
+	"sarabi/internal/misc"
 	"sarabi/internal/service"
 	"sarabi/logger"
 )
@@ -103,6 +104,11 @@ func (l *logCollector) Run(ctx context.Context, deploymentID uuid.UUID) (*compon
 		tcpPort: []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: "3100"}},
 	}
 
+	err = l.dc.CreateNetwork(ctx, l.Name())
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := l.dc.StartContainerAndWait(ctx, docker.StartContainerParams{
 		Image:        imageName,
 		Container:    l.Name(),
@@ -111,6 +117,7 @@ func (l *logCollector) Run(ctx context.Context, deploymentID uuid.UUID) (*compon
 		ExposedPorts: exposedPorts,
 		Mounts:       mounts,
 		PortBindings: portBindings,
+		Network:      misc.StrPtr(l.Name()),
 	})
 	if err != nil {
 		return nil, err

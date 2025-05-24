@@ -12,6 +12,8 @@ type Config struct {
 	DatabasePath string
 	Domain       string
 	Port         string
+
+	RunLogCollector bool
 }
 
 func New() Config {

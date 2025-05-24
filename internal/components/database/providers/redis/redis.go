@@ -29,7 +29,7 @@ func (p redisProvider) Setup() error {
 func (p redisProvider) EnvVars(dep *types.Deployment) []types.CreateSecretParams {
 	password, _ := misc.DefaultRandomIdGenerator.Generate(64)
 	dbName := fmt.Sprintf("redis-%s-%s", dep.Application.Name, dep.Environment)
-	username := fmt.Sprintf("%s-%s-user", dep.Application.Name, dep.Environment)
+	username := fmt.Sprintf("redis-%s-%s-user", dep.Application.Name, dep.Environment)
 	host := fmt.Sprintf("redis-%s-%s", dep.Application.Name, dep.Environment)
 	databaseUrl := misc.FormatURI("redis", username, password, host, p.Port(), dbName, "disable")
 	return []types.CreateSecretParams{
@@ -50,5 +50,5 @@ func (p redisProvider) Port() string {
 }
 
 func (p redisProvider) Engine() types.StorageEngine {
-	return types.StorageEngineMongo
+	return types.StorageEngineRedis
 }

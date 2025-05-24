@@ -43,7 +43,7 @@ sarabi is ideal for:
 ---
 
 ## 🚀 Getting Started
-Head to https://doc.sarabi.dev/ to get started!
+Head to https://doc.sarabi.dev/guides/introduction/ to get started!
 
 ## Future Plans
 - **Multi-Server Support:** Deploy applications across multiple servers for enhanced scalability and redundancy.

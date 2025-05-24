@@ -101,13 +101,21 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 	domainService := service.NewDomainService(domainRepo)
 	caddyClient := caddy.NewClient(eventBus, domainService, cfg)
 
-	logCollector := logcollector.New(docker, lokiClient, secretService)
-	if _, err := logCollector.Run(ctx, uuid.Nil); err != nil {
-		return nil, err, nil
+	var logsManager logs.Manager
+
+	if cfg.RunLogCollector {
+		logCollector := logcollector.New(docker, lokiClient, secretService)
+		if _, err := logCollector.Run(ctx, uuid.Nil); err != nil {
+			return nil, err, nil
+		}
+
+		logsManager = logs.NewManager(docker, appService, logsRepository, secretService, lokiClient, eventBus)
+		go func() {
+			logsManager.Watch(ctx)
+		}()
 	}
 
 	fm := firewall.NewManager()
-	logsManager := logs.NewManager(docker, appService, logsRepository, secretService, lokiClient, eventBus)
 
 	backupSvc, err := service.NewBackupService(docker, appService, secretService, backupSettingsRepo, backupRepository)
 	if err != nil {
@@ -123,10 +131,6 @@ func setup(cfg config.Config) (*http.Server, error, func() error) {
 	if err != nil {
 		return nil, err, nil
 	}
-
-	go func() {
-		logsManager.Watch(ctx)
-	}()
 
 	if err := caddyClient.Init(ctx); err != nil {
 		return nil, errors.Wrap(err, "caddy failed to init"), nil
