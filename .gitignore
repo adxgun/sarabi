@@ -22,3 +22,4 @@ sarabi
 docs/.vscode
 test-caddy.json
 *.sarabi.yml
+sshkeys

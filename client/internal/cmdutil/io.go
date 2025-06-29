@@ -21,6 +21,10 @@ func Print(message string) {
 	_, _ = fmt.Fprintln(os.Stdout, message)
 }
 
+func Printf(format string, message ...any) {
+	_, _ = fmt.Fprintf(os.Stdout, format, message)
+}
+
 func PrintS(message string) {
 	println()
 	color.Green(message)

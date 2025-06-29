@@ -145,7 +145,7 @@ output_success_message() {
 
 main() {
   get_public_ip
-  setup_domain
+  # setup_domain
   install_docker
   pull_images
   download_sarabi

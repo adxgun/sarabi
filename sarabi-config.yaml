@@ -1,0 +1,25 @@
+servers:
+  - ip: 51.79.52.175
+    mode: manager
+    ssh_port: 22
+    block_device: /dev/vdb
+    auth:
+      user: ubuntu
+      type: ssh
+      path: /Users/lekanadigun/github/adigunhammedolalekan/sarabi/sshkeys/manager
+  - ip: 198.244.189.205
+    mode: worker
+    ssh_port: 22
+    block_device: /dev/vdb
+    auth:
+      user: ubuntu
+      type: ssh
+      path: /Users/lekanadigun/github/adigunhammedolalekan/sarabi/sshkeys/worker1
+  - ip: 57.129.65.147
+    mode: worker
+    ssh_port: 22
+    block_device: /dev/vdb
+    auth:
+      user: ubuntu
+      type: ssh
+      path: /Users/lekanadigun/github/adigunhammedolalekan/sarabi/sshkeys/worker2
