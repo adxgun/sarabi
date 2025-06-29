@@ -40,9 +40,10 @@ func NewConfigInitCmd(svc api.Pinger) *cobra.Command {
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 			defer cancel()
 
-			if err := runInitSarabi(ctx, path); err != nil {
+			if err := runInitSarabi(ctx, path, svc); err != nil {
 				cmdutil.PrintE(err.Error())
 			}
+
 		},
 	}
 	cmd.Flags().StringVarP(&path, "path", "p", "", "sarabi configuration path")
@@ -56,7 +57,7 @@ func toURL(u *url.URL) string {
 	return u.String()
 }
 
-func runInitSarabi(ctx context.Context, path string) error {
+func runInitSarabi(ctx context.Context, path string, svc api.Pinger) error {
 	cfg, err := parseConfig(path)
 	if err != nil {
 		return configErr(err)
@@ -83,6 +84,15 @@ func runInitSarabi(ctx context.Context, path string) error {
 
 	if err := g.Wait(); err != nil {
 		return configErr(err)
+	}
+
+	ctx = context.Background()
+	for _, vm := range cfg.Servers {
+		addr := fmt.Sprintf("http://%s:3646/", vm.IP)
+		err = svc.Ping(ctx, addr, "ping")
+		if err != nil {
+			cmdutil.PrintE(fmt.Errorf("ping %s failed: %v", addr, err).Error())
+		}
 	}
 
 	return nil

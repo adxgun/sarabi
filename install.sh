@@ -91,7 +91,9 @@ generate_or_recover_encryption_key() {
 # Function to start Sarabi as a service
 start_sarabi_service() {
 # Create data directory for sarabi to store its data
-mkdir -p /var/sarabi/data
+sudo mkdir -p /var/sarabi/data
+sudo chown -R $(whoami) /var/sarabi/data
+sudo chmod -R 755 /var/sarabi/data
 
 # Create SqliteDB file
 touch /var/sarabi/data/database.db
